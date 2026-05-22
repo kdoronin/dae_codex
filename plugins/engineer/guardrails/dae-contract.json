@@ -1,0 +1,535 @@
+{
+  "schema_version": "1.0",
+  "contract_name": "disciplined-agentic-engineering-runtime",
+  "description": "Runtime-enforceable DAE rules for Codex CLI. Adapt and commit under plugins/engineer/guardrails/dae-contract.json.",
+  "enforcement_modes": [
+    "hard_gate",
+    "advisory_guard",
+    "audit_only",
+    "skill_gate",
+    "ci_release_gate",
+    "platform_limit"
+  ],
+  "rules": [
+    {
+      "id": "dae.session_context_loaded",
+      "title": "DAE context loaded at session start",
+      "description": "SessionStart must inject DAE non-negotiables, current checkpoint, and next legal action.",
+      "severity": "high",
+      "events": [
+        "SessionStart"
+      ],
+      "enforcement_mode": {
+        "SessionStart": "advisory_guard"
+      },
+      "hard_gate_supported": false,
+      "detector": "dae_guard.py session-start",
+      "audit_required": true,
+      "message": "Load DAE runtime context before work begins.",
+      "docs": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "dae.pipeline_order",
+      "title": "DAE checkpoint order is mandatory",
+      "description": "Feature work must follow charter, ACs, Gherkin spec, plan, implement, refine, verify, optional hardening.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate",
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy pipeline_order",
+      "audit_required": true,
+      "message": "Requested action is out of DAE checkpoint order.",
+      "docs": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "dae.feature_charter_required",
+      "title": "Feature charter required",
+      "description": "Feature implementation requires a feature/charter artifact before downstream gates.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy feature_charter_required",
+      "audit_required": true,
+      "message": "Create or approve feature charter before implementation.",
+      "docs": []
+    },
+    {
+      "id": "dae.acceptance_criteria_required",
+      "title": "Acceptance criteria required",
+      "description": "Implementation requires acceptance criteria.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy acceptance_criteria_required",
+      "audit_required": true,
+      "message": "Implementation requires acceptance criteria first.",
+      "docs": []
+    },
+    {
+      "id": "dae.acceptance_criteria_human_approved",
+      "title": "Acceptance criteria human-approved",
+      "description": "ACs require durable human approval before implementation.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy ac_approval",
+      "audit_required": true,
+      "message": "Human approval for acceptance criteria is missing.",
+      "docs": []
+    },
+    {
+      "id": "dae.gherkin_spec_required",
+      "title": "Gherkin spec required",
+      "description": "Implementation requires generated/approved Gherkin spec.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy gherkin_spec_required",
+      "audit_required": true,
+      "message": "Implementation requires a Gherkin spec first.",
+      "docs": []
+    },
+    {
+      "id": "dae.spec_leakage_forbidden",
+      "title": "Spec leakage forbidden",
+      "description": "Specs must describe external behavior, not implementation details.",
+      "severity": "high",
+      "events": [
+        "PreToolUse",
+        "PostToolUse"
+      ],
+      "enforcement_mode": {
+        "PreToolUse": "hard_gate",
+        "PostToolUse": "advisory_guard"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy spec_leakage",
+      "audit_required": true,
+      "message": "Spec contains implementation leakage.",
+      "docs": []
+    },
+    {
+      "id": "dae.plan_required_before_implementation",
+      "title": "Plan required before implementation",
+      "description": "Implementation requires plan artifact when DAE workflow reaches implementation.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy plan_required",
+      "audit_required": true,
+      "message": "Implementation requires an approved plan first.",
+      "docs": []
+    },
+    {
+      "id": "dae.plan_human_approved",
+      "title": "Plan human-approved",
+      "description": "Architecture/plan checkpoint requires durable human approval.",
+      "severity": "critical",
+      "events": [
+        "UserPromptSubmit",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "UserPromptSubmit": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy plan_approval",
+      "audit_required": true,
+      "message": "Human approval for plan is missing.",
+      "docs": []
+    },
+    {
+      "id": "dae.source_write_requires_gates",
+      "title": "Source writes require gates",
+      "description": "Source implementation writes require AC/spec/plan/approval gates.",
+      "severity": "critical",
+      "events": [
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy source_write_requires_gates",
+      "audit_required": true,
+      "message": "Source write denied until DAE gates are complete.",
+      "docs": []
+    },
+    {
+      "id": "dae.generated_acceptance_tests_immutable",
+      "title": "Generated acceptance tests immutable",
+      "description": "Generated acceptance tests must be regenerated, not manually edited.",
+      "severity": "critical",
+      "events": [
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy generated_test_edit",
+      "audit_required": true,
+      "message": "Generated acceptance test edit denied; regenerate from spec.",
+      "docs": []
+    },
+    {
+      "id": "dae.two_test_streams_required",
+      "title": "Two test streams required",
+      "description": "Acceptance and unit tests must both be green before completion.",
+      "severity": "critical",
+      "events": [
+        "PostToolUse",
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "PostToolUse": "advisory_guard",
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy two_test_streams",
+      "audit_required": true,
+      "message": "Both acceptance and unit streams must be verified green.",
+      "docs": []
+    },
+    {
+      "id": "dae.acceptance_tests_green",
+      "title": "Acceptance tests green",
+      "description": "Acceptance stream evidence required before done.",
+      "severity": "critical",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy acceptance_tests_green",
+      "audit_required": true,
+      "message": "Acceptance test evidence is missing or failing.",
+      "docs": []
+    },
+    {
+      "id": "dae.unit_tests_green",
+      "title": "Unit tests green",
+      "description": "Unit stream evidence required before done.",
+      "severity": "critical",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy unit_tests_green",
+      "audit_required": true,
+      "message": "Unit test evidence is missing or failing.",
+      "docs": []
+    },
+    {
+      "id": "dae.progress_breadcrumb_required",
+      "title": "Progress breadcrumb required",
+      "description": "Feature work must keep progress breadcrumb current.",
+      "severity": "high",
+      "events": [
+        "PostToolUse",
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "PostToolUse": "advisory_guard",
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy progress_breadcrumb",
+      "audit_required": true,
+      "message": "Progress breadcrumb missing.",
+      "docs": []
+    },
+    {
+      "id": "dae.handoff_required",
+      "title": "Handoff required",
+      "description": "Completion requires handoff summary when feature work occurred.",
+      "severity": "high",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy handoff_required",
+      "audit_required": true,
+      "message": "Handoff summary missing.",
+      "docs": []
+    },
+    {
+      "id": "dae.branch_hygiene_required",
+      "title": "Branch hygiene required",
+      "description": "Feature work should occur on an appropriate branch or be explicitly marked NA.",
+      "severity": "medium",
+      "events": [
+        "SessionStart",
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "SessionStart": "advisory_guard",
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy branch_hygiene",
+      "audit_required": true,
+      "message": "Branch hygiene evidence missing.",
+      "docs": []
+    },
+    {
+      "id": "dae.mutation_workflow_required_when_configured",
+      "title": "Mutation workflow required when configured",
+      "description": "Mutation evidence required for configured hardening flows.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy mutation_required",
+      "audit_required": true,
+      "message": "Mutation evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.crap_analysis_required_when_configured",
+      "title": "CRAP analysis required when configured",
+      "description": "CRAP evidence required for high-risk code where configured.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy crap_required",
+      "audit_required": true,
+      "message": "CRAP analysis evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.architecture_check_required_when_configured",
+      "title": "Architecture check required when configured",
+      "description": "Architecture review/check evidence required where configured.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy architecture_required",
+      "audit_required": true,
+      "message": "Architecture check evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.refine_review_required_when_configured",
+      "title": "Refine review required when configured",
+      "description": "Refine/reuse/quality/efficiency review evidence required where configured.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy refine_required",
+      "audit_required": true,
+      "message": "Refine review evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.duplicate_detection_required_when_configured",
+      "title": "Duplicate detection required when configured",
+      "description": "Duplicate detection evidence required where configured.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy duplicate_detection",
+      "audit_required": true,
+      "message": "Duplicate detection evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.test_impact_required_when_configured",
+      "title": "Test impact required when configured",
+      "description": "Test impact analysis evidence required where configured.",
+      "severity": "medium",
+      "events": [
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "Stop": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy test_impact",
+      "audit_required": true,
+      "message": "Test impact evidence missing where required.",
+      "docs": []
+    },
+    {
+      "id": "dae.unsafe_permission_denied",
+      "title": "Unsafe permission denied",
+      "description": "Unsafe escalation or bypass permissions must be denied.",
+      "severity": "critical",
+      "events": [
+        "PermissionRequest",
+        "PreToolUse"
+      ],
+      "enforcement_mode": {
+        "PermissionRequest": "hard_gate",
+        "PreToolUse": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy unsafe_permission",
+      "audit_required": true,
+      "message": "Unsafe permission escalation denied by DAE.",
+      "docs": []
+    },
+    {
+      "id": "dae.destructive_command_denied",
+      "title": "Destructive command denied",
+      "description": "Destructive shell commands are denied unless explicitly approved by policy.",
+      "severity": "critical",
+      "events": [
+        "PreToolUse",
+        "PermissionRequest"
+      ],
+      "enforcement_mode": {
+        "PreToolUse": "hard_gate",
+        "PermissionRequest": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy destructive_command",
+      "audit_required": true,
+      "message": "Destructive command denied by DAE.",
+      "docs": []
+    },
+    {
+      "id": "dae.out_of_workspace_write_denied",
+      "title": "Out-of-workspace write denied",
+      "description": "Writes outside project workspace are denied unless explicitly approved.",
+      "severity": "critical",
+      "events": [
+        "PreToolUse",
+        "PermissionRequest"
+      ],
+      "enforcement_mode": {
+        "PreToolUse": "hard_gate",
+        "PermissionRequest": "hard_gate"
+      },
+      "hard_gate_supported": true,
+      "detector": "dae_guard.py policy out_of_workspace_write",
+      "audit_required": true,
+      "message": "Out-of-workspace write denied by DAE.",
+      "docs": []
+    },
+    {
+      "id": "dae.audit_log_required",
+      "title": "Audit log required",
+      "description": "Every enforcement decision must be recorded as JSONL.",
+      "severity": "high",
+      "events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PermissionRequest",
+        "Stop"
+      ],
+      "enforcement_mode": {
+        "SessionStart": "audit_only",
+        "UserPromptSubmit": "audit_only",
+        "PreToolUse": "audit_only",
+        "PostToolUse": "audit_only",
+        "PermissionRequest": "audit_only",
+        "Stop": "audit_only"
+      },
+      "hard_gate_supported": false,
+      "detector": "dae_guard.py audit",
+      "audit_required": true,
+      "message": "Write enforcement audit evidence.",
+      "docs": []
+    },
+    {
+      "id": "dae.docs_do_not_overpromise_enforcement",
+      "title": "Docs do not overpromise enforcement",
+      "description": "Docs must distinguish hard gates from advisory/audit/platform limits.",
+      "severity": "high",
+      "events": [],
+      "enforcement_mode": {
+        "docs": "ci_release_gate"
+      },
+      "hard_gate_supported": false,
+      "detector": "production docs audit",
+      "audit_required": false,
+      "message": "Documentation must not claim universal unbypassable enforcement.",
+      "docs": [
+        "README.md"
+      ]
+    }
+  ]
+}

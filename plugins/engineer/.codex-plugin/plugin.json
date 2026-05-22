@@ -1,0 +1,18 @@
+{
+  "name": "engineer",
+  "version": "0.12.0",
+  "description": "Disciplined Agentic Engineering methodology kit for Codex CLI: feature intake, AC discovery, Gherkin specs, planning, implementation, refinement, verification, and hardening.",
+  "author": { "name": "Miklos" },
+  "repository": "https://github.com/swingerman/disciplined-agentic-engineering",
+  "license": "MIT",
+  "keywords": ["dae", "disciplined-agentic-engineering", "methodology", "ai-development", "tdd", "atdd", "engineering", "codex"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Disciplined Agentic Engineer",
+    "shortDescription": "Charter-bound Codex engineering workflows with deterministic guardrails.",
+    "developerName": "Miklos",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Run Commands"]
+  }
+}

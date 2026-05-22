@@ -1,0 +1,18 @@
+{
+  "name": "atdd",
+  "version": "0.8.0",
+  "description": "Acceptance Test Driven Development workflows for Codex CLI: Gherkin specs, project-specific acceptance pipelines, two test streams, and mutation testing.",
+  "author": { "name": "Miklos" },
+  "repository": "https://github.com/swingerman/disciplined-agentic-engineering",
+  "license": "MIT",
+  "keywords": ["atdd", "acceptance-testing", "tdd", "given-when-then", "spec-driven-design", "codex"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "ATDD",
+    "shortDescription": "Codex workflows for acceptance-test-driven development.",
+    "developerName": "Miklos",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Run Commands"]
+  }
+}

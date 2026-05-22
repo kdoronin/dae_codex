@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "contract_id": "dae.project_start.enforcement",
+  "description": "Runtime-enforced DAE contract for new project creation prompts in Codex CLI.",
+  "states": [
+    "NO_DAE_STATE",
+    "PROJECT_INTAKE",
+    "CHARTER_DRAFTED",
+    "CHARTER_APPROVED",
+    "ACS_DRAFTED",
+    "SPEC_DRAFTED",
+    "SPEC_APPROVED",
+    "PLAN_DRAFTED",
+    "PLAN_APPROVED",
+    "IMPLEMENTATION_ALLOWED",
+    "VERIFYING",
+    "DONE"
+  ],
+  "state_source": ".engineer/project-start-state.json",
+  "approval_source": ".engineer/approvals.jsonl",
+  "implementation_unlock": {
+    "required_artifacts": [
+      "CHARTER.md",
+      "features/000-project-start/acs.md",
+      "features/000-project-start/spec.md",
+      "features/000-project-start/plan.md"
+    ],
+    "required_approval": {
+      "type": "plan_approved",
+      "flow": "project_start",
+      "feature_id": "000-project-start",
+      "artifact": "features/000-project-start/plan.md",
+      "artifact_sha256": "must_match_current_file"
+    }
+  },
+  "rules": [
+    {
+      "id": "dae.project_start.route_new_project_prompt",
+      "events": ["UserPromptSubmit"],
+      "severity": "high",
+      "enforcement_mode": "advisory_guard",
+      "description": "Normal new-project prompts route to project intake and inject no-code-yet context."
+    },
+    {
+      "id": "dae.project_start.block_bypass_prompt",
+      "events": ["UserPromptSubmit"],
+      "severity": "critical",
+      "enforcement_mode": "hard_gate",
+      "description": "Prompts explicitly bypassing DAE, ACs, specs, plan, approval, or guardrails are blocked."
+    },
+    {
+      "id": "dae.project_start.no_scaffold_before_plan_approval",
+      "events": ["PreToolUse"],
+      "severity": "critical",
+      "enforcement_mode": "hard_gate",
+      "description": "Scaffold/source/config/test writes are denied until charter, ACs, Gherkin spec, plan, and non-stale approval exist."
+    },
+    {
+      "id": "dae.project_start.allow_planning_artifacts",
+      "events": ["PreToolUse"],
+      "severity": "medium",
+      "enforcement_mode": "hard_gate",
+      "description": "DAE planning artifacts are allowed before implementation approval."
+    },
+    {
+      "id": "dae.project_start.deny_unsafe_permissions",
+      "events": ["PermissionRequest"],
+      "severity": "critical",
+      "enforcement_mode": "hard_gate",
+      "description": "Dangerous escalation, bypass modes, destructive commands, writes outside workspace, and guardrail disabling are denied."
+    },
+    {
+      "id": "dae.project_start.audit_allowed_writes",
+      "events": ["PostToolUse"],
+      "severity": "medium",
+      "enforcement_mode": "audit_only",
+      "description": "Allowed writes are audited and state drift is surfaced as remediation context."
+    },
+    {
+      "id": "dae.project_start.stop_requires_next_step_or_evidence",
+      "events": ["Stop"],
+      "severity": "high",
+      "enforcement_mode": "hard_gate",
+      "description": "Do not finish project-start turns with missing next step, approval, evidence, or handoff."
+    }
+  ],
+  "allowed_before_plan_approved": [
+    ".engineer/**",
+    ".dae/**",
+    "CHARTER.md",
+    "PROJECT_CHARTER.md",
+    "features/**/feature.md",
+    "features/**/acs.md",
+    "features/**/acceptance-criteria.md",
+    "features/**/acceptance_criteria.md",
+    "features/**/spec.md",
+    "features/**/plan.md",
+    "features/**/progress.md",
+    "features/**/handoffs/*.md",
+    "docs/dae/**"
+  ],
+  "blocked_before_plan_approved": [
+    "src/**",
+    "app/**",
+    "lib/**",
+    "server/**",
+    "client/**",
+    "web/**",
+    "api/**",
+    "components/**",
+    "pages/**",
+    "routes/**",
+    "migrations/**",
+    "tests/**",
+    "__tests__/**",
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "poetry.lock",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "Dockerfile",
+    "docker-compose*.yml",
+    "Makefile",
+    "*.go",
+    "*.rs",
+    "*.py",
+    "*.ts",
+    "*.tsx",
+    "*.js",
+    "*.jsx",
+    "*.java",
+    "*.kt",
+    "*.cs",
+    "*.php",
+    "*.rb"
+  ]
+}

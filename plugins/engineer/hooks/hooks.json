@@ -1,0 +1,80 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-session-start.sh\"",
+            "timeout": 30,
+            "statusMessage": "Loading DAE runtime contract"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-user-prompt-submit.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking DAE prompt gate"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-pre-tool-use.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking DAE pre-tool gate"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-post-tool-use.sh\"",
+            "timeout": 30,
+            "statusMessage": "Recording DAE tool evidence"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-permission-request.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking DAE permission gate"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-stop.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking DAE completion gate"
+          }
+        ]
+      }
+    ]
+  }
+}

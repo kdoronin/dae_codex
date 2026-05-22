@@ -1,0 +1,18 @@
+{
+  "name": "crap-analyzer",
+  "version": "0.1.0",
+  "description": "Analyze recently changed code for Change Risk Anti-Patterns in Codex CLI, rank risky functions, and propose safe refactors and tests.",
+  "author": { "name": "Miklos Szanyi", "url": "https://github.com/swingerman" },
+  "homepage": "https://github.com/swingerman/disciplined-agentic-engineering/tree/main/plugins/crap-analyzer",
+  "repository": "https://github.com/swingerman/disciplined-agentic-engineering",
+  "license": "MIT",
+  "keywords": ["code-quality", "testing", "coverage", "refactoring", "cyclomatic-complexity", "crap", "codex"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CRAP Analyzer",
+    "shortDescription": "Changed-code risk analysis using complexity and coverage.",
+    "developerName": "Miklos Szanyi",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Run Commands"]
+  }
+}

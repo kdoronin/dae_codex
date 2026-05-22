@@ -1,0 +1,29 @@
+{
+  "name": "disciplined-agentic-engineering",
+  "interface": {
+    "displayName": "Disciplined Agentic Engineering"
+  },
+  "plugins": [
+    {
+      "name": "atdd",
+      "interface": { "displayName": "ATDD" },
+      "source": { "source": "local", "path": "./plugins/atdd" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "engineer",
+      "interface": { "displayName": "Disciplined Agentic Engineer" },
+      "source": { "source": "local", "path": "./plugins/engineer" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "crap-analyzer",
+      "interface": { "displayName": "CRAP Analyzer" },
+      "source": { "source": "local", "path": "./plugins/crap-analyzer" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Logs, temp files, and local archives
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+*.pid
+*.seed
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Dependencies and package-manager caches
+node_modules/
+vendor/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+
+# Build and coverage outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+coverage/
+
+# Python build artifacts and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Codex local scratch
+.codex/cache/
+.codex/tmp/
+.codex/logs/
+
+# Marketing drafts — source of truth lives in Notion ("DAE — Marketing & Launch")
+linkedin-*.html
+twitter-*.md
+social-preview.jpg
+social-preview.png
+
+# Local working artifacts — superpowers brainstorming/plan docs (not part of the kit)
+docs/superpowers/
+
+# Local verification/evidence harnesses and task packages are not release payload.
+.dae-verification/
+.dae-production-readiness/
+.dae-runtime-enforcement/
+.dae-project-start-enforcement/
+.dae-hook-output-contract/
+codex-migration-task/
+dae-codex-realworld-verification-task/
+dae-codex-production-readiness-task/
+dae-codex-runtime-enforcement-task/
+dae-codex-project-start-enforcement-task/
+dae-codex-hook-output-contract-fix-task/
+dae-codex-hook-output-contract-fix-task.zip
+dae-codex-*-goal.zip
+codex-migration-report.md
+docs/codex-migration-*.md
