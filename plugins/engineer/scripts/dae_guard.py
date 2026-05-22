@@ -96,11 +96,6 @@ REQUIRED_RULE_IDS = {
     "dae.docs_do_not_overpromise_enforcement",
 }
 
-IMPLEMENTATION_PROMPT_RE = re.compile(
-    r"\b(implement|build|add|create|write|code|patch|fix|refactor|измен|"
-    r"реализ|добав|почин|напиш|сделай)\b",
-    re.IGNORECASE,
-)
 NEW_PROJECT_PROMPT_RE = re.compile(
     r"(from\s+scratch|from\s+zero|new\s+(project|app|application|saas)|"
     r"create\s+(a\s+)?new|build\s+(me\s+)?(a\s+)?(?:todo|crm|saas|app|project)|"
@@ -114,17 +109,6 @@ PLANNING_ONLY_PROMPT_RE = re.compile(
 )
 APPROVAL_PROMPT_RE = re.compile(
     r"(i\s+approve|approved|approve\s+the\s+plan|план\s+подтвержд|подтверждаю|одобряю)",
-    re.IGNORECASE,
-)
-BYPASS_PROMPT_RE = re.compile(
-    r"(ignore\s+dae|skip\s+(spec|test|plan|approval)|just\s+implement|"
-    r"no\s+spec|approve\s+everything|bypass|danger[- ]full|yolo|"
-    r"без\s+(спек|тест|план)|игнорируй\s+dae)",
-    re.IGNORECASE,
-)
-FINALIZE_PROMPT_RE = re.compile(
-    r"\b(done|complete|ship|shipping|release|publish|merge|commit|push|finalize|"
-    r"готово|закончи|заверши|релиз|запуш|коммит)\b",
     re.IGNORECASE,
 )
 WORKFLOW_PROMPT_RE = re.compile(
@@ -461,7 +445,9 @@ def emit_allow_context(message: str) -> None:
 
 def emit_block(message: str) -> None:
     event_name = hook_event_from_command()
-    if event_name in {"UserPromptSubmit", "PostToolUse"}:
+    if event_name == "UserPromptSubmit":
+        emit_context(message)
+    elif event_name == "PostToolUse":
         emit_json(
             {
                 "decision": "block",
@@ -1407,92 +1393,55 @@ def cmd_session_start(event: dict[str, Any]) -> int:
 def cmd_user_prompt_submit(event: dict[str, Any]) -> int:
     root = discover_project_root(event)
     prompt = str(event.get("prompt") or event.get("user_prompt") or event.get("message") or "")
-    bypass = bool(BYPASS_PROMPT_RE.search(prompt))
-    disable = bool(re.search(r"(disable|turn\s+off|remove)\s+(dae|hooks|guardrails)|отключи\s+(dae|хуки|guard)", prompt, re.IGNORECASE))
-    if bypass or disable:
-        state = inspect_state(root)
-        missing = missing_implementation_gates(state)
-        message = (
-            "dae.pipeline_order: DAE blocks prompts that explicitly bypass project-start intake, acceptance criteria, "
-            "Gherkin specs, plan approval, hooks, or guardrails. Start with project intake."
-        )
-        write_audit(event, root, "dae.pipeline_order", "block", message, missing)
-        emit_block(message)
-        return 0
-    quality = effective_quality_status(root)
-    if FINALIZE_PROMPT_RE.search(prompt) and quality.get("quality_dirty") and quality.get("blocking_gates"):
-        message = (
-            "dae.quality_gates_required: feature quality is dirty; completion/release requires quality-verify first. "
-            f"Pending gates: {', '.join(quality.get('blocking_gates') or [])}."
-        )
-        write_audit(event, root, "dae.two_test_streams_required", "block", message, list(quality.get("blocking_gates") or []))
-        emit_block(message)
-        return 0
-    if PLANNING_ONLY_PROMPT_RE.search(prompt):
-        ensure_project_start_state(root, "planning_only")
-        message = (
-            "Planning-only request. You may discuss and draft DAE planning artifacts, but "
-            "implementation/scaffold writes remain blocked until explicit plan approval."
-        )
-        write_audit(event, root, "dae.pipeline_order", "context", message)
-        emit_context(message)
-        return 0
+    if prompt.strip() and not project_start_state_path(root).exists() and not (root / ".engineer" / "dae-state.json").exists() and latest_feature_dir(root) is None:
+        ensure_project_start_state(root, "intake")
     if APPROVAL_PROMPT_RE.search(prompt):
         ok, message = record_project_start_plan_approval(root, prompt)
-        write_audit(event, root, "dae.plan_human_approved", "allow" if ok else "block", message)
-        if ok:
-            emit_context(message + " Implementation may proceed only while the approved plan hash remains current.")
-        else:
-            emit_block(message)
-        return 0
-    if NEW_PROJECT_PROMPT_RE.search(prompt):
-        ensure_project_start_state(root, "new_project_creation")
-        state = inspect_state(root)
-        message = (
-            "DAE project-start intake required. Do not edit scaffold/source/config/test files. "
-            "Draft a project charter, make explicit assumptions, ask only the minimum necessary "
-            "clarifying questions, and request approval before ACs/specs/plan. "
-            f"Current state: {state.get('project_start_state')}. Implementation remains blocked until "
-            "charter, ACs, Gherkin spec, plan, and non-stale human plan approval exist."
-        )
-        write_audit(event, root, "dae.pipeline_order", "context", message, missing_implementation_gates(state))
-        emit_context(message)
-        return 0
+        approval_note = message if ok else f"Approval not recorded yet: {message}"
+    else:
+        approval_note = ""
     state = inspect_state(root)
     missing = missing_implementation_gates(state)
-    implementation = bool(IMPLEMENTATION_PROMPT_RE.search(prompt))
-    workflow = bool(WORKFLOW_PROMPT_RE.search(prompt))
-    if implementation and not workflow and missing:
-        rule = "dae.source_write_requires_gates"
-        message = (
-            f"{rule}: implementation is blocked until DAE gates exist: {', '.join(missing)}. "
-            f"Next legal action: run {state.get('checkpoint')} workflow and record human approvals."
-        )
-        write_audit(event, root, rule, "block", message, missing)
-        emit_block(message)
-        return 0
-    if workflow:
-        message = (
-            f"DAE workflow prompt allowed. Current checkpoint: {state.get('checkpoint')}; "
-            f"missing gates: {', '.join(missing) if missing else 'none'}."
-        )
-        if quality.get("quality_dirty") and quality.get("blocking_gates"):
-            message += (
-                " Quality gates are pending before completion/release: "
-                f"{', '.join(quality.get('blocking_gates') or [])}. Run quality-verify when ready."
-            )
-        write_audit(event, root, "dae.pipeline_order", "context", message, missing)
-        emit_allow_context(message)
-        return 0
+    quality = effective_quality_status(root)
+    missing_text = ", ".join(missing) if missing else "none"
+    pending_quality = list(quality.get("blocking_gates") or quality.get("required_gates") or [])
+    pending_quality_text = ", ".join(pending_quality) if pending_quality else "none"
+    state_label = state.get("project_start_state") if state.get("flow") == "project_start" else state.get("checkpoint")
+    allowed = [
+        "inspect the repository",
+        "draft or update charter/feature, acceptance criteria, Gherkin spec, plan, progress, handoff, and evidence artifacts",
+        "record explicit assumptions",
+        "ask the user only for unresolved decisions",
+        "create .engineer/policy-overrides.jsonl for audited policy changes",
+    ]
+    blocked = [
+        "source/scaffold/config/test writes before PLAN_APPROVED",
+        "commit/push/release/deploy while quality evidence is dirty, missing, stale, or failing",
+    ]
+    if PLANNING_ONLY_PROMPT_RE.search(prompt):
+        route_note = "Prompt routed as planning context only."
+    elif NEW_PROJECT_PROMPT_RE.search(prompt):
+        route_note = "Prompt routed into DAE project-start intake."
+    elif WORKFLOW_PROMPT_RE.search(prompt):
+        route_note = "Prompt routed as DAE workflow context."
     if quality.get("quality_dirty") and quality.get("blocking_gates"):
-        message = (
-            "dae.quality_gates_required: quality gates are pending before completion/release: "
-            f"{', '.join(quality.get('blocking_gates') or [])}. Run quality-verify when ready."
-        )
-        write_audit(event, root, "dae.two_test_streams_required", "context", message, list(quality.get("blocking_gates") or []))
-        emit_context(message)
-        return 0
-    write_audit(event, root, "dae.audit_log_required", "allow", "Prompt allowed without DAE intervention.")
+        quality_note = "Quality evidence is required before completion: run quality-verify after recording fresh evidence."
+    else:
+        quality_note = "Quality gate status does not block artifact acquisition."
+    parts = [
+        "DAE UserPromptSubmit is context-only; prompts are not hard-blocked by wording.",
+        f"Current checkpoint: {state_label}; active feature: {state.get('active_feature') or 'none'}; missing artifacts/gates: {missing_text}.",
+        f"Allowed next artifact-acquisition actions: {'; '.join(allowed)}.",
+        f"Blocked implementation/finalization actions: {'; '.join(blocked)}.",
+        f"Pending quality gates: {pending_quality_text}. {quality_note}",
+    ]
+    if approval_note:
+        parts.append(approval_note)
+    if "route_note" in locals():
+        parts.append(route_note)
+    message = " ".join(parts)
+    write_audit(event, root, "dae.pipeline_order", "context", message, missing + pending_quality)
+    emit_allow_context(message)
     return 0
 
 

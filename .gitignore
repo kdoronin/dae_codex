@@ -78,6 +78,7 @@ docs/superpowers/
 .dae-project-start-enforcement/
 .dae-hook-output-contract/
 .dae-quality-gate-enforcement/
+.dae-artifact-gated-pipeline/
 codex-migration-task/
 dae-codex-realworld-verification-task/
 dae-codex-production-readiness-task/

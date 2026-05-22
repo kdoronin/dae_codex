@@ -20,7 +20,7 @@
             "type": "command",
             "command": "bash \"$PLUGIN_ROOT/hooks/scripts/dae-user-prompt-submit.sh\"",
             "timeout": 30,
-            "statusMessage": "Checking DAE prompt gate"
+            "statusMessage": "Loading DAE prompt context"
           }
         ]
       }

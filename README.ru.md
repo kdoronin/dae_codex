@@ -36,7 +36,7 @@ Installer:
 - добавляет GitHub-репозиторий как Codex plugin marketplace;
 - устанавливает и включает `engineer`, `atdd` и `crap-analyzer`;
 - включает безопасные Codex features для goals и hooks;
-- устанавливает ATDD hook bridge в `~/.codex/hooks.json`, потому что Codex CLI 0.133 загружает runtime hooks из config-layer hook files, а plugin-local hook manifests пока не всегда надежно выполняются hook engine;
+- устанавливает DAE runtime hook bridge в `~/.codex/hooks.json`, потому что текущие Codex CLI releases могут требовать config-layer hooks даже при наличии plugin-local hook manifests;
 - не включает `danger-full-access`, approval bypasses или небезопасные permissions.
 
 Ручная установка:
@@ -173,6 +173,8 @@ Custom agents находятся в `.codex/agents/`:
 
 Основной runtime-слой принадлежит плагину `engineer`: `plugins/engineer/hooks/hooks.json` подключает `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest` и `Stop` к `plugins/engineer/scripts/dae_guard.py`. Installer `scripts/install-codex-dae.sh --runtime-enforcement --verify` дополнительно ставит user-level bridge в `~/.codex/hooks.json`.
 
+`UserPromptSubmit` только добавляет контекст: текущий checkpoint, missing artifacts, допустимые artifact-acquisition actions, запрещенные implementation/finalization actions и путь через `.engineer/policy-overrides.jsonl` для policy changes. Он не hard-block-ит prompt из-за слов в тексте.
+
 `PostToolUse` после implementation/scaffold/config/test edits не запускает дорогие анализаторы на каждое изменение. Он помечает `.engineer/quality-state.json` как `quality_dirty=true`, вычисляет обязательные evidence gates и показывает следующий допустимый шаг: `quality-verify`.
 
 `PreToolUse` блокирует поддерживаемые release/finalization actions, включая `git commit`, `git push`, merge, publish и deploy, пока quality dirty или evidence failing. `Stop` не дает завершить работу без machine-readable evidence.
@@ -216,6 +218,9 @@ python3 plugins/engineer/scripts/dae_guard.py validate-contract
 python3 plugins/engineer/scripts/dae_guard.py doctor
 python3 plugins/engineer/scripts/dae_guard.py quality-config
 python3 plugins/engineer/scripts/dae_guard.py quality-doctor
+python3 dae-codex-artifact-gated-pipeline-task/tools/no_keyword_blocking_audit.py . --json > .dae-artifact-gated-pipeline/reports/no-keyword-blocking-audit.json
+python3 plugins/engineer/scripts/artifact_pipeline_hook_probe.py
+python3 dae-codex-artifact-gated-pipeline-task/tools/pipeline_evidence_validator.py .dae-artifact-gated-pipeline/reports/pipeline-transition-matrix.json
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 find plugins -path '*/.codex-plugin/plugin.json' -print -exec python3 -m json.tool {} \; >/dev/null
 find plugins -path '*/hooks/*.json' -print -exec python3 -m json.tool {} \; >/dev/null

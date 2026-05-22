@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "pipeline": {
+    "states": [
+      "NO_STATE",
+      "INTAKE",
+      "CHARTER_READY",
+      "ACS_READY",
+      "GHERKIN_SPEC_READY",
+      "PLAN_READY",
+      "PLAN_APPROVED",
+      "IMPLEMENTATION_STARTED",
+      "IMPLEMENTATION_DONE",
+      "QUALITY_DIRTY",
+      "QUALITY_VERIFYING",
+      "QUALITY_VERIFIED",
+      "HANDOFF_READY",
+      "DONE"
+    ],
+    "allow_agent_drafted_artifacts": true,
+    "allow_agent_assumptions": true,
+    "allow_interview_questions": true,
+    "require_user_approval_before_implementation": true,
+    "allow_delegated_goal_approval": true,
+    "delegated_goal_approval": {
+      "allowed_for_repo_maintenance": true,
+      "allowed_for_product_features": false,
+      "requires_self_contained_goal": true,
+      "requires_validation_loop": true,
+      "requires_final_report": true
+    }
+  },
+  "user_prompt_submit": {
+    "mode": "route_and_context_only",
+    "forbid_keyword_based_blocking": true,
+    "allowed_outputs": [
+      "additionalContext",
+      "empty_stdout"
+    ],
+    "forbidden_outputs": [
+      "decision:block"
+    ]
+  },
+  "pre_tool_use": {
+    "block_implementation_writes_before_plan_approved": true,
+    "allow_planning_artifacts_before_plan_approved": true,
+    "block_release_when_quality_dirty": true
+  },
+  "post_tool_use": {
+    "mark_quality_dirty_after_implementation_edit": true,
+    "run_expensive_analyzers_on_every_edit": false
+  },
+  "stop": {
+    "block_completion_with_missing_artifacts": true,
+    "block_completion_with_missing_or_stale_quality_evidence": true
+  },
+  "quality_gates": {
+    "default_mode": "strict",
+    "acceptance": "required",
+    "unit": "required",
+    "crap": "required",
+    "architecture": "required",
+    "refine": "required",
+    "duplicate_detection": "required",
+    "test_impact": "required",
+    "progress": "required",
+    "handoff": "required",
+    "mutation": "risk_triggered"
+  },
+  "overrides": {
+    "allow_gate_relaxation": true,
+    "require_justification": true,
+    "require_scope": true,
+    "require_approval": true,
+    "require_expiry_for_relaxation": true,
+    "audit_override_events": true
+  }
+}

@@ -153,7 +153,7 @@ def main() -> int:
         code, parsed, _ = run_guard("session-start", {"hook_event_name": "SessionStart"}, root)
         results.append(result("session_start_surfaces_pending_quality", parsed is not None and "pending=" in parsed["hookSpecificOutput"].get("additionalContext", "") and "crap" in parsed["hookSpecificOutput"].get("additionalContext", ""), [], ["dae_guard.py session-start"]))
         code, parsed, _ = run_guard("user-prompt-submit", {"hook_event_name": "UserPromptSubmit", "prompt": "Continue with quality-verify workflow."}, root)
-        results.append(result("user_prompt_surfaces_pending_quality", parsed is not None and "quality gates are pending" in parsed["hookSpecificOutput"].get("additionalContext", "").lower(), [], ["dae_guard.py user-prompt-submit"]))
+        results.append(result("user_prompt_surfaces_pending_quality", parsed is not None and "pending quality gates" in parsed["hookSpecificOutput"].get("additionalContext", "").lower(), [], ["dae_guard.py user-prompt-submit"]))
         code, parsed, _ = run_guard("stop", {"hook_event_name": "Stop", "last_assistant_message": "Done."}, root)
         results.append(result("stop_blocks_missing_crap", parsed is not None and parsed.get("decision") == "block" and "crap" in parsed.get("reason", ""), [], ["dae_guard.py stop"]))
         code, parsed, _ = run_guard("pre-tool-use", {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git commit -m demo"}}, root)
@@ -280,11 +280,12 @@ def main() -> int:
         code, parsed, _ = run_guard("validate-quality-config", {}, root)
         results.append(result("audited_relaxation_allowed", code == 0 and parsed is not None, [str(root / ".engineer" / "dae-quality-gates.json")], ["dae_guard.py validate-quality-config"]))
 
-    matrix = {"schema_version": 1, "results": results}
+    verdict = "PASS" if all(r["status"] == "PASS" for r in results) else "FAIL"
+    matrix = {"schema_version": 1, "verdict": verdict, "results": results}
     matrix_path = reports / "quality-gate-matrix.json"
     matrix_path.write_text(json.dumps(matrix, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"verdict": "PASS" if all(r["status"] == "PASS" for r in results) else "FAIL", "matrix": str(matrix_path)}, indent=2))
-    return 0 if all(r["status"] == "PASS" for r in results) else 1
+    print(json.dumps({"verdict": verdict, "matrix": str(matrix_path)}, indent=2))
+    return 0 if verdict == "PASS" else 1
 
 
 if __name__ == "__main__":

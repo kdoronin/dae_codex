@@ -1,0 +1,44 @@
+{
+  "criteria": [
+    {
+      "id": "AC-001",
+      "description": "UserPromptSubmit never hard-blocks because of prompt wording.",
+      "observable_outcome": "Prompts containing implement, bypass, skip, hooks, quality, CRAP, ATDD, or tests return additionalContext or empty output, not decision:block.",
+      "trace_to_goal": "Replace prompt-keyword blocking"
+    },
+    {
+      "id": "AC-002",
+      "description": "Missing artifacts are acquired before implementation.",
+      "observable_outcome": "Before PLAN_APPROVED, planning artifacts are allowed and implementation/scaffold/config/test writes are denied by PreToolUse.",
+      "trace_to_goal": "Artifact-gated pipeline enforcement"
+    },
+    {
+      "id": "AC-003",
+      "description": "Implementation edits dirty quality state and require evidence.",
+      "observable_outcome": "PostToolUse marks quality_dirty=true after implementation-affecting edits and records required evidence gates.",
+      "trace_to_goal": "Evidence-gated quality enforcement"
+    },
+    {
+      "id": "AC-004",
+      "description": "Completion and release remain blocked until evidence is fresh and passing.",
+      "observable_outcome": "Stop and release-like PreToolUse actions deny completion when acceptance, unit, CRAP, architecture/refine, progress, handoff, duplicate detection, test impact, generated acceptance immutability, or required mutation evidence is missing, stale, or failing.",
+      "trace_to_goal": "Quality gate enforcement"
+    },
+    {
+      "id": "AC-005",
+      "description": "Gate relaxation is auditable only.",
+      "observable_outcome": "Strict defaults exist; relaxing required gates without scope, justification, approval, and expiry or no-expiry reason fails validation.",
+      "trace_to_goal": "Configurable strict defaults and overrides"
+    }
+  ],
+  "edge_cases": [
+    "Policy-change requests mention forbidden-looking words but are routed to override artifacts.",
+    "Delegated approval applies only to repo maintenance, not product-feature implementation.",
+    "CRAP warning or high-risk findings trigger mutation when policy requires it."
+  ],
+  "constraints": [
+    "Specs describe external observables only.",
+    "Generated tests are regenerated from specs, not hand-edited.",
+    "Hook output must be valid event-specific JSON or empty stdout."
+  ]
+}

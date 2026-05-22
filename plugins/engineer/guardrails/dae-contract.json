@@ -33,7 +33,7 @@
     {
       "id": "dae.pipeline_order",
       "title": "DAE checkpoint order is mandatory",
-      "description": "Feature work must follow charter, ACs, Gherkin spec, plan, implement, refine, verify, optional hardening.",
+      "description": "Feature work must follow charter, ACs, Gherkin spec, plan, implement, refine, verify, optional hardening. UserPromptSubmit injects context only; hard gates are state/action based on later events.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
@@ -41,14 +41,14 @@
         "Stop"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate",
         "Stop": "hard_gate"
       },
       "hard_gate_supported": true,
       "detector": "dae_guard.py policy pipeline_order",
       "audit_required": true,
-      "message": "Requested action is out of DAE checkpoint order.",
+      "message": "Requested action is out of DAE checkpoint order; prompt events only receive routing context.",
       "docs": [
         "README.md"
       ]
@@ -56,14 +56,14 @@
     {
       "id": "dae.feature_charter_required",
       "title": "Feature charter required",
-      "description": "Feature implementation requires a feature/charter artifact before downstream gates.",
+      "description": "Feature implementation requires a feature/charter artifact before downstream gates. UserPromptSubmit reports missing artifacts without blocking.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -75,14 +75,14 @@
     {
       "id": "dae.acceptance_criteria_required",
       "title": "Acceptance criteria required",
-      "description": "Implementation requires acceptance criteria.",
+      "description": "Implementation requires acceptance criteria. UserPromptSubmit reports missing artifacts without blocking.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -94,14 +94,14 @@
     {
       "id": "dae.acceptance_criteria_human_approved",
       "title": "Acceptance criteria human-approved",
-      "description": "ACs require durable human approval before implementation.",
+      "description": "ACs require durable human approval before implementation. UserPromptSubmit reports missing approvals without blocking.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -113,14 +113,14 @@
     {
       "id": "dae.gherkin_spec_required",
       "title": "Gherkin spec required",
-      "description": "Implementation requires generated/approved Gherkin spec.",
+      "description": "Implementation requires generated/approved Gherkin spec. UserPromptSubmit reports missing artifacts without blocking.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -151,14 +151,14 @@
     {
       "id": "dae.plan_required_before_implementation",
       "title": "Plan required before implementation",
-      "description": "Implementation requires plan artifact when DAE workflow reaches implementation.",
+      "description": "Implementation requires plan artifact when DAE workflow reaches implementation. UserPromptSubmit reports missing artifacts without blocking.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -170,14 +170,14 @@
     {
       "id": "dae.plan_human_approved",
       "title": "Plan human-approved",
-      "description": "Architecture/plan checkpoint requires durable human approval.",
+      "description": "Architecture/plan checkpoint requires durable human approval. UserPromptSubmit may record explicit approval markers but does not block prompts.",
       "severity": "critical",
       "events": [
         "UserPromptSubmit",
         "PreToolUse"
       ],
       "enforcement_mode": {
-        "UserPromptSubmit": "hard_gate",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "hard_gate"
       },
       "hard_gate_supported": true,
@@ -502,7 +502,7 @@
       ],
       "enforcement_mode": {
         "SessionStart": "audit_only",
-        "UserPromptSubmit": "audit_only",
+        "UserPromptSubmit": "advisory_guard",
         "PreToolUse": "audit_only",
         "PostToolUse": "audit_only",
         "PermissionRequest": "audit_only",
