@@ -36,49 +36,63 @@
   "rules": [
     {
       "id": "dae.project_start.route_new_project_prompt",
-      "events": ["UserPromptSubmit"],
+      "events": [
+        "UserPromptSubmit"
+      ],
       "severity": "high",
       "enforcement_mode": "advisory_guard",
       "description": "Normal new-project prompts route to project intake and inject no-code-yet context."
     },
     {
-      "id": "dae.project_start.block_bypass_prompt",
-      "events": ["UserPromptSubmit"],
-      "severity": "critical",
-      "enforcement_mode": "hard_gate",
-      "description": "Prompts explicitly bypassing DAE, ACs, specs, plan, approval, or guardrails are blocked."
+      "id": "dae.project_start.route_policy_change_prompt",
+      "events": [
+        "UserPromptSubmit"
+      ],
+      "severity": "high",
+      "enforcement_mode": "advisory_guard",
+      "description": "Prompts asking to bypass, relax, or disable DAE are routed to policy override artifacts; UserPromptSubmit does not hard-block because of wording."
     },
     {
       "id": "dae.project_start.no_scaffold_before_plan_approval",
-      "events": ["PreToolUse"],
+      "events": [
+        "PreToolUse"
+      ],
       "severity": "critical",
       "enforcement_mode": "hard_gate",
       "description": "Scaffold/source/config/test writes are denied until charter, ACs, Gherkin spec, plan, and non-stale approval exist."
     },
     {
       "id": "dae.project_start.allow_planning_artifacts",
-      "events": ["PreToolUse"],
+      "events": [
+        "PreToolUse"
+      ],
       "severity": "medium",
       "enforcement_mode": "hard_gate",
       "description": "DAE planning artifacts are allowed before implementation approval."
     },
     {
       "id": "dae.project_start.deny_unsafe_permissions",
-      "events": ["PermissionRequest"],
+      "events": [
+        "PermissionRequest"
+      ],
       "severity": "critical",
       "enforcement_mode": "hard_gate",
       "description": "Dangerous escalation, bypass modes, destructive commands, writes outside workspace, and guardrail disabling are denied."
     },
     {
       "id": "dae.project_start.audit_allowed_writes",
-      "events": ["PostToolUse"],
+      "events": [
+        "PostToolUse"
+      ],
       "severity": "medium",
       "enforcement_mode": "audit_only",
       "description": "Allowed writes are audited and state drift is surfaced as remediation context."
     },
     {
       "id": "dae.project_start.stop_requires_next_step_or_evidence",
-      "events": ["Stop"],
+      "events": [
+        "Stop"
+      ],
       "severity": "high",
       "enforcement_mode": "hard_gate",
       "description": "Do not finish project-start turns with missing next step, approval, evidence, or handoff."

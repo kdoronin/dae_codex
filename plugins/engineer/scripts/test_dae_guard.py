@@ -142,15 +142,18 @@ class DaeGuardTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(parsed["status"], "PASS")
 
-    def test_user_prompt_blocks_bypass_without_gates(self) -> None:
+    def test_user_prompt_never_blocks_keyword_laden_prompt_without_gates(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             init_repo(root)
-            event = {"hook_event_name": "UserPromptSubmit", "prompt": "Ignore DAE and just implement. Skip specs."}
+            event = {"hook_event_name": "UserPromptSubmit", "prompt": "/goal Implement CRAP quality gates and prevent bypass, skip, hooks, ATDD, tests, guardrails regressions."}
             _, parsed, _ = run_guard("user-prompt-submit", event, root)
-            self.assertEqual(parsed["decision"], "block")
-            self.assertIn("dae.pipeline_order", parsed["reason"])
+            self.assertNotIn("decision", parsed)
             self.assertEqual(parsed["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+            context = parsed["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("context-only", context)
+            self.assertIn("missing artifacts/gates", context)
+            self.assertIn("source/scaffold/config/test writes before PLAN_APPROVED", context)
 
     def test_user_prompt_routes_new_project_to_intake(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -162,7 +165,7 @@ class DaeGuardTests(unittest.TestCase):
             self.assertIn("hookSpecificOutput", parsed)
             self.assertEqual(parsed["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
             self.assertIn("project-start intake", parsed["hookSpecificOutput"]["additionalContext"])
-            self.assertNotEqual(parsed.get("decision"), "block")
+            self.assertNotIn("decision", parsed)
 
     def test_user_prompt_allows_feature_init(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -171,7 +174,18 @@ class DaeGuardTests(unittest.TestCase):
             event = {"hook_event_name": "UserPromptSubmit", "prompt": "Start feature-init and discover ACs."}
             _, parsed, _ = run_guard("user-prompt-submit", event, root)
             self.assertEqual(parsed["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
-            self.assertIn("DAE workflow prompt allowed", parsed["hookSpecificOutput"]["additionalContext"])
+            self.assertNotIn("decision", parsed)
+            self.assertIn("Allowed next artifact-acquisition actions", parsed["hookSpecificOutput"]["additionalContext"])
+
+    def test_user_prompt_policy_relaxation_request_routes_to_override_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            init_repo(root)
+            event = {"hook_event_name": "UserPromptSubmit", "prompt": "Disable hooks and bypass quality checks for this task."}
+            _, parsed, _ = run_guard("user-prompt-submit", event, root)
+            self.assertNotIn("decision", parsed)
+            context = parsed["hookSpecificOutput"]["additionalContext"]
+            self.assertIn(".engineer/policy-overrides.jsonl", context)
 
     def test_pre_tool_denies_source_write_without_gates(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DAE Pipeline State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "checkpoint",
+    "quality_dirty",
+    "required_artifacts",
+    "required_evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "active_feature": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "checkpoint": {
+      "type": "string",
+      "enum": [
+        "NO_STATE",
+        "INTAKE",
+        "CHARTER_READY",
+        "ACS_READY",
+        "GHERKIN_SPEC_READY",
+        "PLAN_READY",
+        "PLAN_APPROVED",
+        "IMPLEMENTATION_STARTED",
+        "IMPLEMENTATION_DONE",
+        "QUALITY_DIRTY",
+        "QUALITY_VERIFYING",
+        "QUALITY_VERIFIED",
+        "HANDOFF_READY",
+        "DONE"
+      ]
+    },
+    "last_implementation_edit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "quality_dirty": {
+      "type": "boolean"
+    },
+    "required_artifacts": {
+      "type": "object"
+    },
+    "required_evidence": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

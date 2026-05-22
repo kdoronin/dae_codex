@@ -42,6 +42,7 @@ Scripts live in `scripts/` and are stdlib-only Python unless noted:
 - `dae_mutmap.py` supports differential mutation selection.
 - `dae_tracker_local.py` implements the local tracker driver.
 - `dae_guard.py` evaluates Codex lifecycle hook events, checks DAE state and approvals, emits deny/block/continue/context responses, and writes runtime audit JSONL.
+- `artifact_pipeline_hook_probe.py` runs the artifact/state/evidence-gated fixture matrix and writes `.dae-artifact-gated-pipeline/reports/pipeline-transition-matrix.json`.
 - `project_start_hook_probe.py` runs synthetic hook probes and fixture repos for new-project enforcement, writing `.dae-project-start-enforcement/reports/project-start-enforcement-matrix.json`.
 
 ## Runtime Hooks
@@ -49,7 +50,7 @@ Scripts live in `scripts/` and are stdlib-only Python unless noted:
 `hooks/hooks.json` wires the guard to all supported lifecycle events:
 
 - `SessionStart` injects DAE context and current checkpoint state.
-- `UserPromptSubmit` routes normal new-project prompts such as `Сделай с нуля CRM для малого бизнеса` into project-start intake and blocks explicit DAE bypass or guardrail-disable prompts.
+- `UserPromptSubmit` is context-only: it loads state, reports the current checkpoint, missing artifacts, allowed artifact-acquisition actions, blocked implementation/finalization actions, and policy-override path. It does not hard-block because of prompt wording.
 - `PreToolUse` denies supported source/scaffold/config/test writes before charter, ACs, Gherkin spec, plan, and non-stale human plan approval exist; DAE planning artifacts remain allowed before approval.
 - `PostToolUse` records source edits and emits advisory remediation context because the tool has already run.
 - `PermissionRequest` denies dangerous or DAE-bypassing escalations.
