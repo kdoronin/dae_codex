@@ -54,6 +54,16 @@ REQUIRED_SUBCOMMANDS = {
     "doctor",
     "state",
     "validate-contract",
+    "quality-config",
+    "validate-quality-config",
+    "quality-status",
+    "quality-mark-dirty",
+    "quality-required-evidence",
+    "quality-validate-evidence",
+    "quality-record-evidence",
+    "quality-verify",
+    "quality-reset-dirty",
+    "quality-doctor",
 }
 REQUIRED_RULE_IDS = {
     "dae.session_context_loaded",
@@ -112,10 +122,28 @@ BYPASS_PROMPT_RE = re.compile(
     r"без\s+(спек|тест|план)|игнорируй\s+dae)",
     re.IGNORECASE,
 )
+FINALIZE_PROMPT_RE = re.compile(
+    r"\b(done|complete|ship|shipping|release|publish|merge|commit|push|finalize|"
+    r"готово|закончи|заверши|релиз|запуш|коммит)\b",
+    re.IGNORECASE,
+)
 WORKFLOW_PROMPT_RE = re.compile(
     r"\b(feature-init|discover[- ]acs?|acceptance criteria|gherkin|spec|"
     r"plan|reorient|onboard|handoff|progress|arch-check|crap|mutation|"
     r"atdd|приемочн|критери|план|спек)\b",
+    re.IGNORECASE,
+)
+RELEASE_COMMAND_RE = re.compile(
+    r"\b(git\s+commit|git\s+push|git\s+merge|git\s+rebase|gh\s+pr\s+merge|"
+    r"npm\s+publish|pnpm\s+publish|yarn\s+npm\s+publish|twine\s+upload|"
+    r"docker\s+push|kubectl\s+apply|helm\s+(?:upgrade|install)|"
+    r"vercel\s+deploy|netlify\s+deploy|fly\s+deploy|railway\s+up|"
+    r"release|publish|deploy)\b",
+    re.IGNORECASE,
+)
+QUALITY_BYPASS_RE = re.compile(
+    r"(quality[- ]gate|crap|mutation|acceptance|unit).{0,40}"
+    r"(bypass|skip|ignore|disable|turn\s+off|remove|force)",
     re.IGNORECASE,
 )
 SOURCE_EXTENSIONS = {
@@ -167,6 +195,40 @@ SAFE_WRITE_PREFIXES = (
     "README",
     "AGENTS",
 )
+QUALITY_GATE_NAMES = (
+    "acceptance",
+    "unit",
+    "crap",
+    "arch",
+    "refine",
+    "branch_hygiene",
+    "progress",
+    "handoff",
+    "duplicate_detection",
+    "test_impact",
+    "generated_acceptance_immutability",
+    "mutation",
+)
+QUALITY_EVIDENCE_LABELS = {
+    "acceptance": "acceptance_stream",
+    "unit": "unit_stream",
+    "crap": "crap_analysis",
+    "arch": "architecture_check",
+    "refine": "refine_review",
+    "branch_hygiene": "branch_hygiene",
+    "progress": "progress_breadcrumb",
+    "handoff": "durable_handoff",
+    "duplicate_detection": "duplicate_detection",
+    "test_impact": "test_impact",
+    "generated_acceptance_immutability": "generated_acceptance_immutability",
+    "mutation": "mutation_workflow",
+}
+QUALITY_LEGACY_EVIDENCE_FILES = {
+    "acceptance": ("acceptance-tests.json",),
+    "unit": ("unit-tests.json",),
+    "crap": ("crap.json",),
+    "arch": ("architecture.json",),
+}
 ALLOWED_BEFORE_PLAN_APPROVED = (
     ".engineer/**",
     ".dae/**",
@@ -462,6 +524,359 @@ def read_json(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)  # type: ignore[arg-type]
+        else:
+            merged[key] = value
+    return merged
+
+
+def quality_default_config_path() -> Path:
+    return script_root() / "guardrails" / "dae-quality-gates.default.json"
+
+
+def quality_config_candidates(project_root: Path) -> list[Path]:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    paths = [
+        quality_default_config_path(),
+        codex_home / "dae" / "quality-gates.json",
+        project_root / ".dae" / "quality-gates.json",
+        project_root / ".engineer" / "dae-quality-gates.json",
+    ]
+    env = os.environ.get("DAE_QUALITY_CONFIG")
+    if env:
+        paths.append(Path(env).expanduser().resolve())
+    return paths
+
+
+def load_quality_config(project_root: Path) -> tuple[dict[str, Any], list[str], list[str]]:
+    config: dict[str, Any] = {}
+    loaded: list[str] = []
+    errors: list[str] = []
+    for path in quality_config_candidates(project_root):
+        if not path.exists():
+            continue
+        data = read_json(path)
+        if not data:
+            errors.append(f"{path}: invalid or empty JSON object")
+            continue
+        config = deep_merge(config, data)
+        loaded.append(str(path))
+    if not config:
+        errors.append(f"{quality_default_config_path()}: default quality config missing")
+    validation_errors = validate_quality_config_data(config, loaded)
+    return config, loaded, errors + validation_errors
+
+
+def default_quality_gate_modes() -> dict[str, str]:
+    data = read_json(quality_default_config_path())
+    gates = data.get("gates") if isinstance(data.get("gates"), dict) else {}
+    return {str(name): str(value.get("mode")) for name, value in gates.items() if isinstance(value, dict)}
+
+
+def validate_quality_config_data(config: dict[str, Any], loaded: list[str] | None = None) -> list[str]:
+    errors: list[str] = []
+    if config.get("schema_version") != 1:
+        errors.append("quality config schema_version must be 1")
+    gates = config.get("gates")
+    if not isinstance(gates, dict) or not gates:
+        errors.append("quality config gates must be a non-empty object")
+        return errors
+    default_modes = default_quality_gate_modes()
+    for gate, data in gates.items():
+        if gate not in QUALITY_GATE_NAMES:
+            errors.append(f"unknown quality gate {gate}")
+        if not isinstance(data, dict):
+            errors.append(f"gate {gate} must be an object")
+            continue
+        mode = data.get("mode")
+        if mode not in {"required", "warn", "off", "conditional"}:
+            errors.append(f"gate {gate} has invalid mode {mode!r}")
+            continue
+        if default_modes.get(str(gate)) == "required" and mode in {"warn", "off"}:
+            required_fields = ["justification", "scope", "approved_by", "approved_at"]
+            missing = [field for field in required_fields if not str(data.get(field) or "").strip()]
+            if not str(data.get("expires_at") or "").strip() and not str(data.get("no_expiry_reason") or "").strip():
+                missing.append("expires_at_or_no_expiry_reason")
+            if missing:
+                errors.append(f"gate {gate} relaxation to {mode} missing audit fields: {', '.join(missing)}")
+        if gate == "crap":
+            thresholds = data.get("thresholds")
+            if not isinstance(thresholds, dict):
+                errors.append("crap gate thresholds must be an object")
+            else:
+                for key in ("max_crap_score", "warn_crap_score", "missing_coverage_policy", "max_high_risk_findings"):
+                    if key not in thresholds:
+                        errors.append(f"crap gate missing thresholds.{key}")
+    return errors
+
+
+def quality_state_path(project_root: Path) -> Path:
+    return project_root / ".engineer" / "quality-state.json"
+
+
+def quality_audit_path(project_root: Path) -> Path:
+    return project_root / ".engineer" / "quality-gate-audit.jsonl"
+
+
+def load_quality_state(project_root: Path) -> dict[str, Any]:
+    state = read_json(quality_state_path(project_root))
+    return state if state else {"version": 1, "quality_dirty": False, "changed_files": [], "required_evidence": []}
+
+
+def write_quality_state(project_root: Path, state: dict[str, Any]) -> None:
+    path = quality_state_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state["version"] = 1
+    state["updated_at"] = now_iso()
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def append_quality_audit(project_root: Path, action: str, details: dict[str, Any]) -> None:
+    path = quality_audit_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {"schema_version": 1, "timestamp": now_iso(), "action": action, **details}
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def active_feature_path(project_root: Path, state: dict[str, Any] | None = None) -> Path | None:
+    inspected = state or inspect_state(project_root)
+    feature_dir = inspected.get("feature_dir")
+    if isinstance(feature_dir, str) and feature_dir:
+        path = Path(feature_dir)
+        return path if path.is_absolute() else project_root / path
+    active = inspected.get("active_feature")
+    if isinstance(active, str) and active:
+        candidate = project_root / "features" / active
+        if candidate.exists():
+            return candidate
+    return latest_feature_dir(project_root)
+
+
+def quality_evidence_dir(project_root: Path, feature_dir: Path | None) -> Path:
+    if feature_dir:
+        return feature_dir / "evidence" / "quality"
+    return project_root / ".engineer" / "evidence" / "quality"
+
+
+def quality_evidence_candidates(project_root: Path, feature_dir: Path | None, gate: str, config: dict[str, Any]) -> list[Path]:
+    gates = config.get("gates") if isinstance(config.get("gates"), dict) else {}
+    gate_config = gates.get(gate) if isinstance(gates.get(gate), dict) else {}
+    filename = str(gate_config.get("evidence") or f"{gate}.json")
+    candidates = [quality_evidence_dir(project_root, feature_dir) / filename]
+    if feature_dir:
+        for legacy in QUALITY_LEGACY_EVIDENCE_FILES.get(gate, (f"{gate}.json",)):
+            candidates.append(feature_dir / "evidence" / legacy)
+    return list(dict.fromkeys(candidates))
+
+
+def parse_iso(value: Any) -> _dt.datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        normalized = value.replace("Z", "+00:00")
+        return _dt.datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def crap_triggers_mutation(crap_data: dict[str, Any], config: dict[str, Any]) -> bool:
+    gates = config.get("gates") if isinstance(config.get("gates"), dict) else {}
+    mutation = gates.get("mutation") if isinstance(gates.get("mutation"), dict) else {}
+    required_when = mutation.get("required_when") if isinstance(mutation.get("required_when"), dict) else {}
+    thresholds = (gates.get("crap") or {}).get("thresholds", {}) if isinstance(gates.get("crap"), dict) else {}
+    warn_score = float(required_when.get("crap_score_gte") or thresholds.get("warn_crap_score") or 20)
+    high_risk = int(required_when.get("high_risk_findings_gte") or 1)
+    summary = crap_data.get("summary") if isinstance(crap_data.get("summary"), dict) else {}
+    try:
+        max_score = float(summary.get("max_crap_score") or 0)
+    except (TypeError, ValueError):
+        max_score = 0
+    try:
+        findings = int(summary.get("high_risk_findings") or 0)
+    except (TypeError, ValueError):
+        findings = 0
+    return str(crap_data.get("status") or "").upper() == "WARN" or max_score >= warn_score or findings >= high_risk
+
+
+def quality_required_gates(config: dict[str, Any], project_root: Path, feature_dir: Path | None, dirty: bool = True) -> list[str]:
+    if not dirty:
+        return []
+    gates = config.get("gates") if isinstance(config.get("gates"), dict) else {}
+    required: list[str] = []
+    for gate in QUALITY_GATE_NAMES:
+        data = gates.get(gate)
+        if not isinstance(data, dict):
+            continue
+        mode = data.get("mode")
+        if mode == "required":
+            required.append(gate)
+    mutation = gates.get("mutation") if isinstance(gates.get("mutation"), dict) else {}
+    if mutation.get("mode") == "conditional" and "mutation" not in required:
+        if "hardening" in str(read_json(project_root / ".engineer" / "dae-state.json").get("checkpoint") or "").lower():
+            required.append("mutation")
+        crap_path = next((p for p in quality_evidence_candidates(project_root, feature_dir, "crap", config) if p.exists()), None)
+        if crap_path and crap_triggers_mutation(read_json(crap_path), config):
+            required.append("mutation")
+    return required
+
+
+def quality_statuses(config: dict[str, Any], project_root: Path, feature_dir: Path | None, quality_state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    dirty_since = parse_iso(quality_state.get("dirty_since"))
+    required = quality_state.get("required_evidence") if isinstance(quality_state.get("required_evidence"), list) else []
+    results: dict[str, dict[str, Any]] = {}
+    for gate in required:
+        paths = quality_evidence_candidates(project_root, feature_dir, str(gate), config)
+        path = next((p for p in paths if p.exists()), None)
+        if not path:
+            results[str(gate)] = {"status": "MISSING", "evidence": None, "errors": ["missing evidence"]}
+            continue
+        data = read_json(path)
+        errors = validate_quality_evidence_data(str(gate), data, config, dirty_since)
+        status = str(data.get("status") or "MISSING").upper()
+        results[str(gate)] = {
+            "status": status if not errors else "FAIL",
+            "evidence": project_rel(path, project_root),
+            "errors": errors,
+        }
+    return results
+
+
+def validate_quality_evidence_data(
+    gate: str,
+    data: dict[str, Any],
+    config: dict[str, Any],
+    dirty_since: _dt.datetime | None = None,
+) -> list[str]:
+    errors: list[str] = []
+    for key in ("schema_version", "gate", "status", "generated_at", "feature", "changed_files"):
+        if key not in data:
+            errors.append(f"missing {key}")
+    if data.get("schema_version") != 1:
+        errors.append("schema_version must be 1")
+    if data.get("gate") != gate:
+        errors.append(f"gate must be {gate}")
+    if str(data.get("status") or "").upper() != "PASS":
+        errors.append(f"required gate {gate} needs PASS status, got {data.get('status')!r}")
+    if not isinstance(data.get("changed_files"), list):
+        errors.append("changed_files must be a list")
+    generated_at = parse_iso(data.get("generated_at"))
+    if dirty_since and generated_at and generated_at < dirty_since:
+        errors.append("evidence is stale: generated_at is older than dirty_since")
+    if gate == "crap":
+        summary = data.get("summary") if isinstance(data.get("summary"), dict) else {}
+        thresholds = data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {}
+        gate_cfg = ((config.get("gates") or {}).get("crap") or {}) if isinstance(config.get("gates"), dict) else {}
+        default_thresholds = gate_cfg.get("thresholds") if isinstance(gate_cfg.get("thresholds"), dict) else {}
+        max_allowed = float(thresholds.get("max_crap_score") or default_thresholds.get("max_crap_score") or 30)
+        max_high_risk = int(thresholds.get("max_high_risk_findings") or default_thresholds.get("max_high_risk_findings") or 0)
+        try:
+            max_score = float(summary.get("max_crap_score"))
+        except (TypeError, ValueError):
+            errors.append("crap evidence missing numeric summary.max_crap_score")
+            max_score = 0
+        try:
+            high_risk = int(summary.get("high_risk_findings") or 0)
+        except (TypeError, ValueError):
+            errors.append("crap evidence has invalid summary.high_risk_findings")
+            high_risk = 0
+        if max_score >= max_allowed:
+            errors.append(f"max CRAP score {max_score} exceeds threshold {max_allowed}")
+        if high_risk > max_high_risk:
+            errors.append(f"high-risk findings {high_risk} exceeds threshold {max_high_risk}")
+        coverage_required = bool(default_thresholds.get("coverage_required_for_pass", True))
+        missing_policy = str(thresholds.get("missing_coverage_policy") or default_thresholds.get("missing_coverage_policy") or "")
+        if coverage_required and not data.get("coverage_source") and "allow" not in missing_policy:
+            errors.append("strict CRAP gate requires explicit coverage_source or audited coverage relaxation")
+    return errors
+
+
+def mark_quality_dirty(project_root: Path, paths: list[str], reason: str, event: dict[str, Any] | None = None) -> dict[str, Any]:
+    inspected = inspect_state(project_root)
+    feature_dir = active_feature_path(project_root, inspected)
+    config, loaded, errors = load_quality_config(project_root)
+    state = load_quality_state(project_root)
+    changed = state.get("changed_files") if isinstance(state.get("changed_files"), list) else []
+    for path in paths:
+        rel = project_rel((project_root / path) if not Path(path).is_absolute() else Path(path), project_root)
+        if rel not in changed:
+            changed.append(rel)
+    if not state.get("quality_dirty"):
+        state["dirty_since"] = now_iso()
+    state["quality_dirty"] = True
+    state["dirty_reason"] = reason
+    state["active_feature"] = inspected.get("active_feature")
+    state["changed_files"] = changed
+    state["config_profile"] = config.get("profile", "strict")
+    state["config_files"] = loaded
+    state["config_errors"] = errors
+    state["required_evidence"] = quality_required_gates(config, project_root, feature_dir, True)
+    state["last_summary"] = None
+    write_quality_state(project_root, state)
+    append_quality_audit(
+        project_root,
+        "quality_mark_dirty",
+        {
+            "reason": reason,
+            "changed_files": changed,
+            "required_evidence": state["required_evidence"],
+            "hook_event_name": (event or {}).get("hook_event_name"),
+        },
+    )
+    return state
+
+
+def effective_quality_status(project_root: Path) -> dict[str, Any]:
+    inspected = inspect_state(project_root)
+    feature_dir = active_feature_path(project_root, inspected)
+    config, loaded, errors = load_quality_config(project_root)
+    state = load_quality_state(project_root)
+    state_exists = quality_state_path(project_root).exists()
+    dirty = bool(state.get("quality_dirty") or (inspected.get("implementation_started") and not state_exists))
+    required = quality_required_gates(config, project_root, feature_dir, dirty)
+    state_required = state.get("required_evidence") if isinstance(state.get("required_evidence"), list) else []
+    for gate in state_required:
+        if gate in QUALITY_GATE_NAMES and gate not in required:
+            required.append(gate)
+    legacy_required = inspected.get("required_evidence") if isinstance(inspected.get("required_evidence"), dict) else {}
+    for gate, enabled in legacy_required.items():
+        if enabled and gate in QUALITY_GATE_NAMES and gate not in required:
+            required.append(gate)
+    if dirty and state.get("required_evidence") != required:
+        state["required_evidence"] = required
+        state["config_profile"] = config.get("profile", "strict")
+        state["config_files"] = loaded
+        if state.get("quality_dirty"):
+            write_quality_state(project_root, state)
+    results = quality_statuses(config, project_root, feature_dir, state)
+    blocking = [gate for gate, result in results.items() if result.get("status") != "PASS"]
+    relaxed = []
+    gates = config.get("gates") if isinstance(config.get("gates"), dict) else {}
+    for gate, data in gates.items():
+        if isinstance(data, dict) and data.get("mode") in {"warn", "off"}:
+            relaxed.append({"gate": gate, "mode": data.get("mode"), "scope": data.get("scope"), "justification": data.get("justification")})
+    return {
+        "schema_version": 1,
+        "status": "PASS" if not errors and not blocking else "FAIL",
+        "profile": config.get("profile", "strict"),
+        "active_feature": inspected.get("active_feature"),
+        "feature_dir": str(feature_dir) if feature_dir else None,
+        "quality_dirty": dirty,
+        "changed_files": state.get("changed_files") if isinstance(state.get("changed_files"), list) else [],
+        "required_gates": required,
+        "gate_results": results,
+        "blocking_gates": blocking,
+        "config_files": loaded,
+        "config_errors": errors,
+        "relaxed_gates": relaxed,
+        "generated_at": now_iso(),
+    }
 
 
 def read_approvals(project_root: Path) -> list[dict[str, Any]]:
@@ -770,6 +1185,23 @@ def is_source_path(path: str) -> bool:
     return suffix in SOURCE_EXTENSIONS or normalized.startswith(("src/", "lib/", "app/", "packages/"))
 
 
+def is_implementation_affecting_path(path: str, project_root: Path | None = None) -> bool:
+    normalized = path.replace("\\", "/").lstrip("./")
+    if not normalized or normalized.endswith("/"):
+        return False
+    if is_planning_artifact_path(normalized) or is_generated_acceptance_path(normalized):
+        return False
+    config: dict[str, Any] = {}
+    if project_root is not None:
+        config, _, _ = load_quality_config(project_root)
+    detection = config.get("dirty_detection") if isinstance(config.get("dirty_detection"), dict) else {}
+    globs = detection.get("implementation_affecting_globs")
+    patterns = globs if isinstance(globs, list) and globs else list(BLOCKED_BEFORE_PLAN_APPROVED)
+    if any(fnmatch.fnmatch(normalized, str(pattern)) for pattern in patterns):
+        return True
+    return is_source_path(normalized) or is_blocked_before_plan_path(normalized)
+
+
 def is_planning_artifact_path(path: str) -> bool:
     normalized = path.replace("\\", "/").lstrip("./")
     return any(fnmatch.fnmatch(normalized, pattern) for pattern in ALLOWED_BEFORE_PLAN_APPROVED)
@@ -877,6 +1309,8 @@ def persist_implementation_touch(project_root: Path, paths: list[str]) -> None:
     state["updated_at"] = now_iso()
     state["implementation_started"] = True
     state["touched_files"] = touched
+    quality_state = mark_quality_dirty(project_root, paths, "implementation_affecting_edit")
+    state["required_evidence"] = {gate: True for gate in quality_state.get("required_evidence", [])}
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -951,13 +1385,18 @@ def record_project_start_plan_approval(project_root: Path, prompt: str) -> tuple
 def cmd_session_start(event: dict[str, Any]) -> int:
     root = discover_project_root(event)
     state = inspect_state(root)
+    quality = effective_quality_status(root)
     missing = state.get("missing_gates") or []
+    pending_quality = quality.get("blocking_gates") or quality.get("required_gates") or []
     message = (
         "DAE runtime context loaded. Pipeline: onboard/reorient -> feature-init -> ACs -> "
         "Gherkin spec -> approved plan -> implementation -> refine -> verify. "
         f"Project-start state: {state.get('project_start_state')}; checkpoint: {state.get('checkpoint')}; "
         f"active feature: {state.get('active_feature') or 'none'}; "
         f"missing gates: {', '.join(missing) if missing else 'none'}. "
+        f"Quality gates: profile={quality.get('profile')}, dirty={quality.get('quality_dirty')}, "
+        f"pending={', '.join(pending_quality) if pending_quality else 'none'}. "
+        f"Next legal quality action: {'quality-verify' if pending_quality else 'continue DAE pipeline'}. "
         "Hard gates cover supported prompt/tool/permission/stop events; non-managed hooks still require Codex trust."
     )
     write_audit(event, root, "dae.session_context_loaded", "context", message)
@@ -978,6 +1417,15 @@ def cmd_user_prompt_submit(event: dict[str, Any]) -> int:
             "Gherkin specs, plan approval, hooks, or guardrails. Start with project intake."
         )
         write_audit(event, root, "dae.pipeline_order", "block", message, missing)
+        emit_block(message)
+        return 0
+    quality = effective_quality_status(root)
+    if FINALIZE_PROMPT_RE.search(prompt) and quality.get("quality_dirty") and quality.get("blocking_gates"):
+        message = (
+            "dae.quality_gates_required: feature quality is dirty; completion/release requires quality-verify first. "
+            f"Pending gates: {', '.join(quality.get('blocking_gates') or [])}."
+        )
+        write_audit(event, root, "dae.two_test_streams_required", "block", message, list(quality.get("blocking_gates") or []))
         emit_block(message)
         return 0
     if PLANNING_ONLY_PROMPT_RE.search(prompt):
@@ -1028,8 +1476,21 @@ def cmd_user_prompt_submit(event: dict[str, Any]) -> int:
             f"DAE workflow prompt allowed. Current checkpoint: {state.get('checkpoint')}; "
             f"missing gates: {', '.join(missing) if missing else 'none'}."
         )
+        if quality.get("quality_dirty") and quality.get("blocking_gates"):
+            message += (
+                " Quality gates are pending before completion/release: "
+                f"{', '.join(quality.get('blocking_gates') or [])}. Run quality-verify when ready."
+            )
         write_audit(event, root, "dae.pipeline_order", "context", message, missing)
         emit_allow_context(message)
+        return 0
+    if quality.get("quality_dirty") and quality.get("blocking_gates"):
+        message = (
+            "dae.quality_gates_required: quality gates are pending before completion/release: "
+            f"{', '.join(quality.get('blocking_gates') or [])}. Run quality-verify when ready."
+        )
+        write_audit(event, root, "dae.two_test_streams_required", "context", message, list(quality.get("blocking_gates") or []))
+        emit_context(message)
         return 0
     write_audit(event, root, "dae.audit_log_required", "allow", "Prompt allowed without DAE intervention.")
     return 0
@@ -1042,6 +1503,16 @@ def cmd_pre_tool_use(event: dict[str, Any]) -> int:
     paths = candidate_write_paths(event)
     tool = str(event.get("tool_name") or "")
     unsafe_paths = [p for p in paths if path_outside_workspace(p, root)]
+    quality = effective_quality_status(root)
+    if (RELEASE_COMMAND_RE.search(command) or QUALITY_BYPASS_RE.search(command)) and quality.get("quality_dirty"):
+        missing = list(quality.get("blocking_gates") or quality.get("required_gates") or [])
+        message = (
+            "dae.quality_gates_required: release/finalization action denied while quality is dirty or failing. "
+            f"Run quality-verify and provide passing evidence for: {', '.join(missing) if missing else 'quality gates'}."
+        )
+        write_audit(event, root, "dae.two_test_streams_required", "deny", message, missing, tool)
+        emit_deny(message)
+        return 0
     if has_dangerous_command(command):
         message = "dae.destructive_command_denied: destructive or permission-bypass command denied by DAE."
         write_audit(event, root, "dae.destructive_command_denied", "deny", message, tool_name=tool)
@@ -1083,13 +1554,23 @@ def cmd_post_tool_use(event: dict[str, Any]) -> int:
     root = discover_project_root(event)
     paths = candidate_write_paths(event)
     tool = str(event.get("tool_name") or "")
-    source_paths = [p for p in paths if is_source_path(project_rel((root / p) if not Path(p).is_absolute() else Path(p), root))]
+    source_paths = [
+        p
+        for p in paths
+        if is_implementation_affecting_path(project_rel((root / p) if not Path(p).is_absolute() else Path(p), root), root)
+    ]
     generated = [p for p in paths if is_generated_acceptance_path(p)]
     spec_paths = [p for p in paths if is_spec_path(p)]
     messages: list[str] = []
     if source_paths:
         persist_implementation_touch(root, source_paths)
-        messages.append("Source edit audited; Stop will require acceptance/unit evidence plus progress and handoff.")
+        quality = effective_quality_status(root)
+        pending = quality.get("required_gates") or []
+        messages.append(
+            "Implementation-affecting edit audited; quality_dirty=true. "
+            "Stop and release actions require quality evidence. "
+            f"Required gates: {', '.join(pending)}. Run quality-verify; heavy analyzers were not run on this edit."
+        )
         write_audit(event, root, "dae.two_test_streams_required", "warn", messages[-1], source_paths, tool)
     if generated:
         messages.append("Generated acceptance tests were touched after tool execution; regenerate them from specs.")
@@ -1115,7 +1596,7 @@ def cmd_permission_request(event: dict[str, Any]) -> int:
     )
     paths = candidate_write_paths(event)
     unsafe_paths = [p for p in paths if path_outside_workspace(p, root)]
-    if has_dangerous_command(text) or unsafe_paths:
+    if has_dangerous_command(text) or unsafe_paths or QUALITY_BYPASS_RE.search(text):
         missing = unsafe_paths if unsafe_paths else []
         message = "dae.unsafe_permission_denied: unsafe escalation, destructive action, or out-of-workspace write denied."
         write_audit(event, root, "dae.unsafe_permission_denied", "deny", message, missing, str(event.get("tool_name") or ""))
@@ -1146,6 +1627,13 @@ def missing_finish_evidence(state: dict[str, Any]) -> list[str]:
     return missing
 
 
+def quality_blockers(project_root: Path) -> list[str]:
+    quality = effective_quality_status(project_root)
+    if not quality.get("quality_dirty"):
+        return []
+    return list(quality.get("blocking_gates") or [])
+
+
 def cmd_stop(event: dict[str, Any]) -> int:
     root = discover_project_root(event)
     if event.get("stop_hook_active") is True:
@@ -1155,12 +1643,15 @@ def cmd_stop(event: dict[str, Any]) -> int:
     last_message = str(event.get("last_assistant_message") or "")
     feature_done_claim = bool(re.search(r"\b(done|complete|implemented|готово|сделано|реализ)\b", last_message, re.IGNORECASE))
     if state.get("implementation_started") or feature_done_claim:
-        missing = missing_finish_evidence(state)
+        quality_state = load_quality_state(root)
+        if feature_done_claim and not state.get("implementation_started") and not quality_state.get("quality_dirty"):
+            mark_quality_dirty(root, ["<completion-claim>"], "completion_claim_without_quality_evidence", event)
+        missing = quality_blockers(root)
         if missing:
             message = (
-                "dae.two_test_streams_required: cannot finish feature work yet. "
-                f"Missing evidence: {', '.join(missing)}. Next legal action: run/record missing checks, "
-                "update progress.md, and add a handoff summary."
+                "dae.quality_gates_required: cannot finish feature work yet. "
+                f"Missing or failing quality evidence: {', '.join(missing)}. Next legal action: run quality-verify, "
+                "produce machine-readable evidence under features/<feature>/evidence/quality/, update progress, and add a handoff summary."
             )
             write_audit(event, root, "dae.two_test_streams_required", "continue", message, missing)
             emit_continue(message)
@@ -1265,6 +1756,24 @@ def cmd_doctor(event: dict[str, Any]) -> int:
     manifest = root / ".codex-plugin" / "plugin.json"
     manifest_data = read_json(manifest)
     checks.append({"name": "manifest_hooks", "status": "PASS" if manifest_data.get("hooks") else "FAIL", "details": [manifest_data.get("hooks")]})
+    evidence_schema = root / "guardrails" / "quality-evidence.schema.json"
+    checks.append({"name": "quality_evidence_schema", "status": "PASS" if evidence_schema.exists() else "FAIL", "details": [str(evidence_schema)]})
+    quality_config, quality_loaded, quality_errors = load_quality_config(project_root)
+    quality_gates = quality_config.get("gates") if isinstance(quality_config.get("gates"), dict) else {}
+    checks.append(
+        {
+            "name": "quality_config",
+            "status": "PASS" if not quality_errors else "FAIL",
+            "details": quality_errors or quality_loaded,
+        }
+    )
+    checks.append(
+        {
+            "name": "quality_crap_required",
+            "status": "PASS" if isinstance(quality_gates.get("crap"), dict) and quality_gates["crap"].get("mode") == "required" else "FAIL",
+            "details": [str(quality_gates.get("crap"))],
+        }
+    )
     for wrapper in wrapper_scripts(root):
         checks.append({"name": f"wrapper:{wrapper.name}", "status": "PASS" if os.access(wrapper, os.X_OK) else "FAIL", "details": [str(wrapper)]})
     try:
@@ -1287,6 +1796,171 @@ def cmd_state(event: dict[str, Any]) -> int:
     return 0
 
 
+def cmd_quality_config(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    config, loaded, errors = load_quality_config(root)
+    status = effective_quality_status(root)
+    output = {
+        "status": "PASS" if not errors else "FAIL",
+        "loaded": loaded,
+        "errors": errors,
+        "audit": {
+            "config_files_loaded": loaded,
+            "profile": config.get("profile", "strict"),
+            "relaxed_gates": status.get("relaxed_gates", []),
+            "thresholds": ((config.get("gates") or {}).get("crap") or {}).get("thresholds", {}) if isinstance(config.get("gates"), dict) else {},
+            "invalid_or_missing_fields": errors,
+            "active_feature": status.get("active_feature"),
+            "required_evidence": status.get("required_gates", []),
+        },
+        "effective_config": config,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if not errors else 1
+
+
+def cmd_validate_quality_config(event: dict[str, Any]) -> int:
+    return cmd_quality_config(event)
+
+
+def cmd_quality_status(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    status = effective_quality_status(root)
+    print(json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if status.get("status") == "PASS" else 1
+
+
+def cmd_quality_mark_dirty(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    paths = candidate_write_paths(event)
+    explicit = event.get("changed_files")
+    if isinstance(explicit, list):
+        paths.extend(str(item) for item in explicit)
+    if not paths:
+        paths = ["<manual-quality-dirty>"]
+    state = mark_quality_dirty(root, paths, str(event.get("reason") or "manual_quality_mark_dirty"), event)
+    print(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_quality_required_evidence(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    status = effective_quality_status(root)
+    print(json.dumps({"required_evidence": status.get("required_gates", []), "quality_dirty": status.get("quality_dirty")}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_quality_validate_evidence(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    status = effective_quality_status(root)
+    print(json.dumps({"status": status.get("status"), "gate_results": status.get("gate_results"), "blocking_gates": status.get("blocking_gates")}, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if status.get("status") == "PASS" else 1
+
+
+def cmd_quality_record_evidence(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    gate = str(event.get("gate") or "")
+    source = event.get("path") or event.get("evidence")
+    if gate not in QUALITY_GATE_NAMES or not isinstance(source, str):
+        print(json.dumps({"status": "FAIL", "errors": ["quality-record-evidence requires gate and path"]}, indent=2))
+        return 2
+    inspected = inspect_state(root)
+    feature_dir = active_feature_path(root, inspected)
+    config, _, errors = load_quality_config(root)
+    if errors:
+        print(json.dumps({"status": "FAIL", "errors": errors}, indent=2))
+        return 1
+    src_path = Path(source)
+    if not src_path.is_absolute():
+        src_path = root / src_path
+    data = read_json(src_path)
+    validation_errors = validate_quality_evidence_data(gate, data, config, parse_iso(load_quality_state(root).get("dirty_since")))
+    if validation_errors:
+        print(json.dumps({"status": "FAIL", "errors": validation_errors}, indent=2))
+        return 1
+    dest = quality_evidence_candidates(root, feature_dir, gate, config)[0]
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    append_quality_audit(root, "quality_record_evidence", {"gate": gate, "evidence": project_rel(dest, root)})
+    print(json.dumps({"status": "PASS", "gate": gate, "evidence": project_rel(dest, root)}, indent=2))
+    return 0
+
+
+def write_quality_summary(project_root: Path, status: dict[str, Any]) -> Path:
+    feature_dir = active_feature_path(project_root)
+    summary_path = quality_evidence_dir(project_root, feature_dir) / "quality-gate-summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "schema_version": 1,
+        "status": status.get("status"),
+        "profile": status.get("profile"),
+        "active_feature": status.get("active_feature"),
+        "quality_dirty": bool(status.get("quality_dirty")) and status.get("status") != "PASS",
+        "required_gates": status.get("required_gates", []),
+        "gate_results": status.get("gate_results", {}),
+        "relaxed_gates": status.get("relaxed_gates", []),
+        "config_files": status.get("config_files", []),
+        "config_errors": status.get("config_errors", []),
+        "generated_at": now_iso(),
+    }
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_path
+
+
+def cmd_quality_verify(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    status = effective_quality_status(root)
+    summary_path = write_quality_summary(root, status)
+    state = load_quality_state(root)
+    state["last_summary"] = project_rel(summary_path, root)
+    if status.get("status") == "PASS":
+        state["quality_dirty"] = False
+        state["cleared_at"] = now_iso()
+    write_quality_state(root, state)
+    append_quality_audit(root, "quality_verify", {"status": status.get("status"), "summary": project_rel(summary_path, root), "blocking_gates": status.get("blocking_gates", [])})
+    output = {**status, "summary_path": project_rel(summary_path, root)}
+    print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if status.get("status") == "PASS" else 1
+
+
+def cmd_quality_reset_dirty(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    status = effective_quality_status(root)
+    if status.get("status") != "PASS":
+        print(json.dumps({"status": "FAIL", "errors": ["quality-reset-dirty requires passing quality status"], "blocking_gates": status.get("blocking_gates", [])}, indent=2))
+        return 1
+    state = load_quality_state(root)
+    state["quality_dirty"] = False
+    state["cleared_at"] = now_iso()
+    write_quality_state(root, state)
+    append_quality_audit(root, "quality_reset_dirty", {"status": "PASS"})
+    print(json.dumps({"status": "PASS", "quality_dirty": False}, indent=2))
+    return 0
+
+
+def cmd_quality_doctor(event: dict[str, Any]) -> int:
+    root = discover_project_root(event)
+    config, loaded, errors = load_quality_config(root)
+    status = effective_quality_status(root)
+    checks = [
+        {"name": "quality_default_config_exists", "status": "PASS" if quality_default_config_path().exists() else "FAIL", "details": [str(quality_default_config_path())]},
+        {"name": "quality_config_valid", "status": "PASS" if not errors else "FAIL", "details": errors or loaded},
+        {"name": "quality_crap_required", "status": "PASS" if ((config.get("gates") or {}).get("crap") or {}).get("mode") == "required" else "FAIL", "details": [str(((config.get("gates") or {}).get("crap") or {}).get("mode"))]},
+        {"name": "quality_state_writable", "status": "PASS", "details": [str(quality_state_path(root))]},
+        {"name": "quality_status", "status": status.get("status"), "details": status.get("blocking_gates", [])},
+    ]
+    try:
+        quality_state_path(root).parent.mkdir(parents=True, exist_ok=True)
+        probe = quality_state_path(root).parent / ".quality-doctor-write-test"
+        probe.write_text("ok\n", encoding="utf-8")
+        probe.unlink()
+    except Exception as exc:
+        checks[3] = {"name": "quality_state_writable", "status": "FAIL", "details": [str(exc)]}
+    overall = "PASS" if all(c["status"] == "PASS" for c in checks[:4]) else "FAIL"
+    print(json.dumps({"status": overall, "checks": checks}, ensure_ascii=False, indent=2))
+    return 0 if overall == "PASS" else 1
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("subcommand", choices=sorted(REQUIRED_SUBCOMMANDS))
@@ -1302,6 +1976,16 @@ def main(argv: list[str]) -> int:
         "doctor": cmd_doctor,
         "state": cmd_state,
         "validate-contract": cmd_validate_contract,
+        "quality-config": cmd_quality_config,
+        "validate-quality-config": cmd_validate_quality_config,
+        "quality-status": cmd_quality_status,
+        "quality-mark-dirty": cmd_quality_mark_dirty,
+        "quality-required-evidence": cmd_quality_required_evidence,
+        "quality-validate-evidence": cmd_quality_validate_evidence,
+        "quality-record-evidence": cmd_quality_record_evidence,
+        "quality-verify": cmd_quality_verify,
+        "quality-reset-dirty": cmd_quality_reset_dirty,
+        "quality-doctor": cmd_quality_doctor,
     }
     return dispatch[args.subcommand](event)
 

@@ -87,6 +87,15 @@ Use the atdd plugin's atdd-mutate skill for differential mutation testing.
 4. Continue through `discover-acs`, `engineer atdd`, `plan`, `atdd-team`, `refine`, and `arch-check`.
 5. Before shipping, run both test streams and the deterministic checks relevant to the feature.
 
+After implementation-affecting edits, DAE marks the feature/session as quality-dirty. Before claiming completion, committing, pushing, merging, publishing, or releasing, run:
+
+```bash
+python3 plugins/engineer/scripts/dae_guard.py quality-status
+python3 plugins/engineer/scripts/dae_guard.py quality-verify
+```
+
+`quality-verify` validates machine-readable evidence and writes `features/<feature>/evidence/quality/quality-gate-summary.json`.
+
 Normal generated files include `features/NNN-slug/feature.md`, `acs.md`, `spec.md`, `plan.md`, `progress.md`, `handoffs/*.md`, and ignored `.build/` artifacts generated from specs.
 
 ## Creating a New Project With DAE Enforcement
@@ -222,15 +231,40 @@ The `engineer` plugin owns the primary runtime hooks:
 | `SessionStart` | Context injection, not a hard block | Injects DAE non-negotiables, checkpoint, active feature, missing gates, and next legal action. |
 | `UserPromptSubmit` | Blocks explicit bypass/disable prompts; routes normal new-project prompts into intake | Allows DAE workflow prompts such as feature-init, AC discovery, spec, plan, verify, CRAP, and mutation work. |
 | `PreToolUse` | Denies supported source/scaffold/config/test writes without gates, generated acceptance test edits, destructive commands, out-of-workspace writes, and unsafe permission bypass commands | DAE planning artifacts continue before approval. |
-| `PostToolUse` | Advisory and audit only | Runs after side effects, so it records source edits and emits model-visible remediation context but cannot undo changes. |
+| `PostToolUse` | Advisory and audit only | Runs after side effects, so it records implementation-affecting edits, marks `quality_dirty=true`, requires strict quality evidence, and emits model-visible remediation context without running heavy analyzers on every edit. |
 | `PermissionRequest` | Denies dangerous escalation, destructive operations, unsafe bypasses, and out-of-workspace writes | Otherwise leaves normal Codex approval flow in place. |
-| `Stop` | Continues/blocks completion when feature-work evidence is missing | Requires acceptance and unit evidence, progress breadcrumb, handoff, plus mutation/CRAP/architecture/refine/duplicate/test-impact evidence when configured. |
+| `Stop` | Continues/blocks completion when feature-work evidence is missing | Requires the strict quality evidence set after implementation-affecting edits: acceptance, unit, CRAP, architecture, refine, branch hygiene, progress, handoff, duplicate detection, test impact, generated acceptance immutability, plus mutation when configured or risk-triggered. |
 
 The `atdd` hook scripts remain as compatibility delegates to the engineer guard. They no longer provide the primary policy path and do not downgrade hard denials to reminders.
 
 Hard gates are limited to Codex events that support deny/block/continue. Advisory guards add model-visible context but cannot technically stop the already-running action. Audit-only checks record evidence. Platform limits are documented instead of hidden: non-managed hooks require trust review, plugin hooks require `[features].plugin_hooks = true`, `PreToolUse` is not a complete OS sandbox, and `PostToolUse` cannot reverse side effects. User-editable personal hooks are strong local enforcement, not an admin-enforced organizational policy.
 
 For managed/team enforcement, install equivalent hook commands through your admin-controlled Codex configuration or managed requirements policy instead of relying only on user-editable `~/.codex/hooks.json`. A managed setup should point every lifecycle event to `python3 ~/.codex/dae/hook-bridge.py <subcommand>` or directly to `plugins/engineer/scripts/dae_guard.py`.
+
+## Quality Gates
+
+The engineer plugin owns cross-plugin quality enforcement. The default registry is `plugins/engineer/guardrails/dae-quality-gates.default.json`. Overrides are loaded in this order: plugin default, user override `$CODEX_HOME/dae/quality-gates.json` (or `~/.codex/dae/quality-gates.json`), project override `.dae/quality-gates.json`, project override `.engineer/dae-quality-gates.json`, and `DAE_QUALITY_CONFIG` for test-only or explicitly controlled runs.
+
+Strict defaults require these gates after implementation/scaffold/config/test edits:
+
+| Gate | Default | Evidence path |
+|---|---:|---|
+| acceptance | required | `features/<feature>/evidence/quality/acceptance.json` |
+| unit | required | `features/<feature>/evidence/quality/unit.json` |
+| CRAP | required | `features/<feature>/evidence/quality/crap.json` |
+| architecture | required | `features/<feature>/evidence/quality/arch.json` |
+| refine | required | `features/<feature>/evidence/quality/refine.json` |
+| branch hygiene | required | `features/<feature>/evidence/quality/branch-hygiene.json` |
+| progress | required | `features/<feature>/evidence/quality/progress.json` |
+| handoff | required | `features/<feature>/evidence/quality/handoff.json` |
+| duplicate detection | required | `features/<feature>/evidence/quality/duplicate-detection.json` |
+| test impact | required | `features/<feature>/evidence/quality/test-impact.json` |
+| generated acceptance immutability | required | `features/<feature>/evidence/quality/generated-acceptance-immutability.json` |
+| mutation | conditional | `features/<feature>/evidence/quality/mutation.json` |
+
+Default CRAP thresholds are strict: fail at `max_crap_score >= 30`, warn at `max_crap_score >= 20`, require explicit coverage evidence where supported, treat missing coverage conservatively, and allow zero high-risk findings. CRAP warning/high-risk evidence triggers mutation.
+
+Relaxing a strict-default gate to `warn` or `off` requires audited config fields: `justification`, `scope`, `approved_by`, `approved_at`, and either `expires_at` or `no_expiry_reason`. Invalid relaxation fails `python3 plugins/engineer/scripts/dae_guard.py validate-quality-config`.
 
 ## Troubleshooting
 
@@ -258,6 +292,8 @@ python3 codex-migration-task/validators/validate_codex_migration.py .
 python3 -m unittest discover plugins/engineer/scripts
 python3 plugins/engineer/scripts/dae_guard.py validate-contract
 python3 plugins/engineer/scripts/dae_guard.py doctor
+python3 plugins/engineer/scripts/dae_guard.py quality-config
+python3 plugins/engineer/scripts/dae_guard.py quality-doctor
 python3 plugins/engineer/scripts/project_start_hook_probe.py
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 find plugins -path '*/.codex-plugin/plugin.json' -print -exec python3 -m json.tool {} \; >/dev/null
