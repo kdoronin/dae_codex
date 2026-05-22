@@ -77,12 +77,14 @@ docs/superpowers/
 .dae-runtime-enforcement/
 .dae-project-start-enforcement/
 .dae-hook-output-contract/
+.dae-quality-gate-enforcement/
 codex-migration-task/
 dae-codex-realworld-verification-task/
 dae-codex-production-readiness-task/
 dae-codex-runtime-enforcement-task/
 dae-codex-project-start-enforcement-task/
 dae-codex-hook-output-contract-fix-task/
+dae-codex-*-task/
 dae-codex-hook-output-contract-fix-task.zip
 dae-codex-*-goal.zip
 codex-migration-report.md

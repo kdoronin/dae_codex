@@ -276,6 +276,12 @@ PY
   else
     DOCTOR_STATUS="FAIL"
   fi
+  QUALITY_DOCTOR_LOG="$REPO_ROOT/.dae-project-start-enforcement/logs/quality-doctor-after-init.json"
+  if PLUGIN_ROOT="$ENGINEER_ROOT" PLUGIN_DATA="$DATA_HOME" CODEX_PROJECT_DIR="$REPO_ROOT" python3 "$ENGINEER_ROOT/scripts/dae_guard.py" quality-doctor > "$QUALITY_DOCTOR_LOG"; then
+    QUALITY_DOCTOR_STATUS="PASS"
+  else
+    QUALITY_DOCTOR_STATUS="FAIL"
+  fi
 
   PROBE_STATUS="SKIPPED"
   if [ "$VERIFY" -eq 1 ]; then
@@ -296,6 +302,7 @@ PY
 - hooks_config: \`$CODEX_HOME/hooks.json\`
 - plugin_data: \`$DATA_HOME\`
 - doctor: \`$DOCTOR_STATUS\`
+- quality_doctor: \`$QUALITY_DOCTOR_STATUS\`
 - synthetic_probes: \`$PROBE_STATUS\`
 
 Review and trust non-managed hooks in Codex with \`/hooks\` when prompted.
@@ -303,6 +310,10 @@ EOF
 
   if [ "$DOCTOR_STATUS" != "PASS" ]; then
     echo "dae_guard.py doctor failed; see $DOCTOR_LOG" >&2
+    exit 1
+  fi
+  if [ "$QUALITY_DOCTOR_STATUS" != "PASS" ]; then
+    echo "dae_guard.py quality-doctor failed; see $QUALITY_DOCTOR_LOG" >&2
     exit 1
   fi
   if [ "$VERIFY" -eq 1 ] && [ "$PROBE_STATUS" != "PASS" ]; then
@@ -324,4 +335,5 @@ Start Codex in a project with:
 Verify with:
   codex plugin list --marketplace $MARKETPLACE
   python3 "$ENGINEER_ROOT/scripts/dae_guard.py" doctor
+  python3 "$ENGINEER_ROOT/scripts/dae_guard.py" quality-doctor
 EOF

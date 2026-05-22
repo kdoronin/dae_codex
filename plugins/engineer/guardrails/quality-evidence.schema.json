@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DAE Quality Evidence",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "gate",
+    "status",
+    "generated_at",
+    "feature",
+    "changed_files"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "gate": {
+      "type": "string"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "WARN",
+        "BLOCKED",
+        "NA"
+      ]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "feature": {
+      "type": "string"
+    },
+    "git_base": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "git_head": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": "object"
+    },
+    "thresholds": {
+      "type": "object"
+    },
+    "findings": {
+      "type": "array"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "crap"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "tool",
+          "thresholds",
+          "summary"
+        ],
+        "properties": {
+          "tool": {
+            "const": "crap-analyzer"
+          },
+          "thresholds": {
+            "type": "object",
+            "required": [
+              "max_crap_score",
+              "warn_crap_score",
+              "missing_coverage_policy",
+              "max_high_risk_findings"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "max_crap_score",
+              "high_risk_findings"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

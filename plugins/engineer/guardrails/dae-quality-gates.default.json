@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "profile": "strict",
+  "description": "Strict default DAE quality-gate policy. Project overrides may relax gates only with audited justification.",
+  "dirty_detection": {
+    "source_edit_marks_quality_dirty": true,
+    "implementation_affecting_globs": [
+      "src/**",
+      "app/**",
+      "lib/**",
+      "server/**",
+      "client/**",
+      "web/**",
+      "api/**",
+      "services/**",
+      "packages/**",
+      "cmd/**",
+      "internal/**",
+      "tests/**",
+      "spec/**",
+      "__tests__/**",
+      "*.py",
+      "*.js",
+      "*.ts",
+      "*.tsx",
+      "*.jsx",
+      "*.go",
+      "*.rs",
+      "*.java",
+      "*.kt",
+      "*.cs",
+      "*.rb",
+      "*.php",
+      "*.swift",
+      "*.c",
+      "*.cpp",
+      "*.h",
+      "*.hpp",
+      "*.m",
+      "*.mm",
+      "*.scala",
+      "*.clj",
+      "*.erl",
+      "*.ex",
+      "*.exs",
+      "*.lua",
+      "*.r",
+      "*.jl",
+      "*.sh",
+      "package.json",
+      "pyproject.toml",
+      "requirements*.txt",
+      "Cargo.toml",
+      "go.mod",
+      "pom.xml",
+      "build.gradle",
+      "Dockerfile",
+      "docker-compose*.yml",
+      "*lock*"
+    ],
+    "planning_artifact_globs": [
+      "features/**/feature.md",
+      "features/**/acs.md",
+      "features/**/acceptance-criteria.md",
+      "features/**/acceptance_criteria.md",
+      "features/**/spec.md",
+      "features/**/plan.md",
+      "features/**/progress.md",
+      "features/**/handoffs/*.md",
+      ".engineer/**",
+      ".dae/**"
+    ]
+  },
+  "evidence": {
+    "base_path": "features/{feature}/evidence/quality",
+    "summary_file": "quality-gate-summary.json",
+    "strict_statuses": ["PASS"]
+  },
+  "gates": {
+    "acceptance": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "atdd",
+      "evidence": "acceptance.json"
+    },
+    "unit": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "atdd",
+      "evidence": "unit.json"
+    },
+    "crap": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "crap-analyzer",
+      "evidence": "crap.json",
+      "thresholds": {
+        "max_crap_score": 30,
+        "warn_crap_score": 20,
+        "missing_coverage_policy": "assume_zero_and_fail_if_threshold_exceeded",
+        "coverage_required_for_pass": true,
+        "max_high_risk_findings": 0
+      }
+    },
+    "arch": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "engineer",
+      "evidence": "arch.json"
+    },
+    "refine": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "engineer",
+      "evidence": "refine.json"
+    },
+    "branch_hygiene": {
+      "mode": "required",
+      "trigger": "before_completion",
+      "provider": "engineer",
+      "evidence": "branch-hygiene.json"
+    },
+    "progress": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "engineer",
+      "evidence": "progress.json"
+    },
+    "handoff": {
+      "mode": "required",
+      "trigger": "before_completion",
+      "provider": "engineer",
+      "evidence": "handoff.json"
+    },
+    "duplicate_detection": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "engineer",
+      "evidence": "duplicate-detection.json"
+    },
+    "test_impact": {
+      "mode": "required",
+      "trigger": "after_implementation_edit",
+      "provider": "engineer",
+      "evidence": "test-impact.json"
+    },
+    "generated_acceptance_immutability": {
+      "mode": "required",
+      "trigger": "after_acceptance_generation",
+      "provider": "atdd",
+      "evidence": "generated-acceptance-immutability.json"
+    },
+    "mutation": {
+      "mode": "conditional",
+      "trigger": "hardening_or_crap_warning_or_config",
+      "provider": "atdd",
+      "evidence": "mutation.json",
+      "required_when": {
+        "hardening_checkpoint": true,
+        "crap_score_gte": 20,
+        "high_risk_findings_gte": 1
+      }
+    }
+  },
+  "enforcement": {
+    "stop_blocks_missing_required_evidence": true,
+    "pretool_blocks_release_actions_when_dirty": true,
+    "permission_request_denies_bypass": true
+  },
+  "relaxation_policy": {
+    "requires_justification": true,
+    "requires_scope": true,
+    "requires_approval": true,
+    "requires_expiry_or_no_expiry_reason": true
+  }
+}

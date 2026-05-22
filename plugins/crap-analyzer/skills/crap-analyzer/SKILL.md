@@ -13,6 +13,8 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 
 This skill scopes analysis to a diff, ranks findings worst-first, and turns each finding into a concrete refactor + test-stub proposal.
 
+When DAE runtime quality gates are active, CRAP evidence is mandatory by default after implementation-affecting edits. Write machine-readable gate evidence to `features/<feature>/evidence/quality/crap.json` and validate it with `python3 plugins/engineer/scripts/dae_guard.py quality-verify` before completion or release.
+
 ## Workflow
 
 1. **Determine the diff.** First that works:
@@ -31,6 +33,39 @@ This skill scopes analysis to a diff, ranks findings worst-first, and turns each
    python3 <skill-dir>/scripts/compute_crap.py --diff - --repo-root <repo> --threshold <N> --format both
    ```
    Default threshold is 20. Read `.crap-analyzer.json` at repo root if present and pass its `threshold` through. Full flag list and output JSON shape: [references/script-reference.md](references/script-reference.md).
+
+   For DAE quality gates, use the strict policy thresholds unless project config explicitly relaxes them with audit fields:
+   - fail at `max_crap_score >= 30`;
+   - warn at `max_crap_score >= 20`;
+   - require explicit coverage evidence in strict mode;
+   - fail if high-risk findings exceed 0.
+
+   Evidence shape:
+
+   ```json
+   {
+     "schema_version": 1,
+     "gate": "crap",
+     "tool": "crap-analyzer",
+     "status": "PASS",
+     "generated_at": "2026-05-22T00:00:00Z",
+     "feature": "features/001-demo",
+     "changed_files": ["src/app.py"],
+     "coverage_source": "coverage.xml",
+     "thresholds": {
+       "max_crap_score": 30,
+       "warn_crap_score": 20,
+       "missing_coverage_policy": "assume_zero_and_fail_if_threshold_exceeded",
+       "max_high_risk_findings": 0
+     },
+     "summary": {
+       "changed_functions": 1,
+       "max_crap_score": 8.0,
+       "high_risk_findings": 0
+     },
+     "findings": []
+   }
+   ```
 
 4. **Present the report.** Show the markdown table. For each finding, link `file:start_line`. If more than ~8 findings, surface the top 5 and mention the rest.
 
@@ -79,5 +114,5 @@ Read if present, pass `--threshold` to the script. No other keys for now.
 ## When not to use this skill
 
 - Analyzing a full codebase unprompted — scope is diff-only by design.
-- Running as a blocking gate in CI — this is a Codex-driven review, not a deterministic check.
+- Running as a standalone CI replacement. In DAE runtime, the analyzer produces evidence and `engineer` owns the cross-plugin blocking gate.
 - Files the script doesn't recognize. Supported extensions listed in [references/script-reference.md](references/script-reference.md); binaries, generated code, and config files are skipped automatically.
