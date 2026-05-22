@@ -165,6 +165,8 @@ DAE operates on numbered feature folders that accumulate progressively sharper c
 feature.md -> acs.md -> spec.md -> plan.md -> implementation -> refine -> verify -> harden
 ```
 
+For a step-by-step runtime and artifact schema, see [`docs/dae-pipeline-schema.ru.md`](docs/dae-pipeline-schema.ru.md).
+
 The checkpoints are:
 
 | # | Checkpoint | Codex skill/workflow | Gate |
